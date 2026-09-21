@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="المداقش" />
+  <meta name="theme-color" content="#ffffff" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="apple-touch-icon" href="icon-192.png" />
+  <link rel="stylesheet" href="styles.css" />
+  <title>المداقش — نشرة الحكم</title>
+</head>
+<body>
+
+  <!-- الشاشة الرئيسية: القائمة -->
+  <main id="listScreen" class="screen">
+    <div class="container">
+
+      <div class="top-bar">
+        <button id="resetBtn" class="top-btn reset-btn" type="button" aria-label="مسح القائمة">
+          مسح القائمة
+        </button>
+        <button id="capitalBtn" class="top-btn capital-btn" type="button" aria-label="رأس المال">
+          رأس المال
+        </button>
+      </div>
+
+      <h1 class="title">مبلغ الفائز</h1>
+
+      <div class="winner-amount">
+        <button id="winnerAmountBtn" class="winner-amount-btn placeholder" type="button">
+          ادخل مبلغ الفوز
+        </button>
+        <input id="winnerAmountInput" class="hidden-input" type="tel" inputmode="numeric" pattern="[0-9]*" maxlength="6" />
+      </div>
+
+      <ul id="playersList" class="players-list" aria-label="قائمة اللاعبين"></ul>
+
+      <footer class="footer">برمجة - أبو ريان 509 | قروب المجَّرشين</footer>
+    </div>
+  </main>
+
+  <!-- شاشة الفائز -->
+  <section id="winnerScreen" class="screen hidden" aria-hidden="true">
+    <div class="winner-card">
+      <div class="winner-content">
+        <p class="winner-line-1">مبروك للفائز</p>
+        <p id="winnerName" class="winner-line-2">—</p>
+        <p id="winnerAmountDisplay" class="winner-line-3">$0k</p>
+      </div>
+      <button id="backBtn" class="back-btn" type="button">
+        &lt; رجوع للقائمة
+      </button>
+    </div>
+  </section>
+
+  <!-- مربع تأكيد المسح -->
+  <div id="confirmOverlay" class="overlay hidden" aria-hidden="true">
+    <div class="confirm-box" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
+      <h2 id="confirmTitle" class="confirm-title">تأكيد المسح</h2>
+      <p class="confirm-text">هل أنت متأكد أنك تريد مسح كل الأسماء والأرصدة؟</p>
+      <div class="confirm-actions">
+        <button id="confirmCancel" class="btn-secondary" type="button">إلغاء</button>
+        <button id="confirmYes" class="btn-danger" type="button">نعم، امسح</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

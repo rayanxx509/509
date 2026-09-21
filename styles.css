@@ -1,0 +1,435 @@
+/* ======= المتغيرات — لوحة ألوان v4 (تدرّج مميّز بصرياً) ======= */
+:root {
+  /* ألوان الحقول المعبّأة كاملة الخلفية */
+  --c-red:      #DC2626;   /* أحمر عميق — خطر */
+  --c-orange:   #FB923C;   /* برتقالي فاتح خوخي — منخفض (نص أسود) */
+  --c-black:    #1F2937;   /* أسود منتصف — Safe Zone */
+  --c-yellow:   #FDE047;   /* أصفر كناري ساطع (نص أسود) */
+  --c-olive:    #4D7C0F;   /* زيتي عميق مميّز عن الأخضر */
+  --c-green:    #16A34A;   /* أخضر صريح — قريب من الفوز */
+  --c-gray:     #F3F4F6;   /* رمادي فاتح — فارغ */
+
+  --winner-green: #16A34A; /* لون إطار حقل مبلغ الفوز والفائز */
+
+  --bg:            #ffffff;
+  --text:          #000000;
+  --placeholder:   #9ca3af;
+  --field-radius:  10px;
+  --field-height:  52px;
+  --border-width:  2.5px;
+
+  --font-ar: -apple-system, "SF Arabic", "SF Pro", "Helvetica Neue",
+             "Segoe UI", "Tahoma", "Arial", sans-serif;
+}
+
+/* ======= إعادة تعيين ======= */
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ar);
+  font-size: 16px;
+  line-height: 1.4;
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior: none;
+}
+
+body {
+  min-height: 100vh;
+  min-height: 100dvh;
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  color: inherit;
+  padding: 0;
+}
+
+.hidden { display: none !important; }
+
+/* ======= الشاشة ======= */
+.screen {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 12px;
+}
+
+.container {
+  width: 100%;
+  max-width: 480px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* ======= الشريط العلوي (أزرار عامة) ======= */
+.top-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.top-btn {
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 8px;
+  padding: 7px 14px;
+  transition: transform 0.05s, background 0.1s;
+}
+.top-btn:active { transform: scale(0.96); }
+
+.reset-btn {
+  color: #666;
+  background: #f3f4f6;
+  border: 1px solid #d1d5db;
+}
+.reset-btn:active { background: #e5e7eb; }
+
+.capital-btn {
+  color: #fff;
+  background: var(--winner-green);
+  border: 1px solid var(--winner-green);
+}
+.capital-btn:active { opacity: 0.9; }
+
+/* ======= العنوان ======= */
+.title {
+  text-align: center;
+  font-size: 22px;
+  font-weight: 800;
+  margin: 4px 0 0;
+}
+
+/* ======= حقل مبلغ الفوز ======= */
+.winner-amount {
+  position: relative;
+  margin: 0 auto;
+  width: 70%;
+  max-width: 260px;
+}
+
+.winner-amount-btn {
+  width: 100%;
+  height: var(--field-height);
+  border: var(--border-width) solid var(--winner-green);
+  border-radius: var(--field-radius);
+  font-size: 26px;
+  font-weight: 800;
+  color: var(--winner-green);
+  background: #fff;
+  text-align: center;
+  transition: transform 0.05s;
+}
+.winner-amount-btn.placeholder {
+  color: var(--placeholder);
+  font-size: 16px;
+  font-weight: 600;
+}
+.winner-amount-btn:active { transform: scale(0.98); }
+
+.hidden-input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+  height: 0;
+  width: 0;
+}
+
+/* ======= قائمة اللاعبين ======= */
+.players-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.player-row {
+  display: flex;
+  align-items: stretch;
+  height: var(--field-height);
+  border-radius: var(--field-radius);
+  overflow: hidden;
+  background: var(--c-gray);
+  color: #111;
+  border: 1px solid rgba(0,0,0,0.06);
+  transition: background 0.35s ease, color 0.35s ease;
+}
+
+.player-btn {
+  flex: 1;
+  padding: 0 14px;
+  font-size: 17px;
+  font-weight: 800;
+  color: inherit;
+  background: transparent;
+  text-align: right;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: background 0.1s;
+}
+.player-btn:active { background: rgba(0,0,0,0.08); }
+.player-btn.placeholder {
+  font-weight: 500;
+  font-size: 14px;
+  opacity: 0.8;
+}
+
+.name-btn { text-align: right; }
+.balance-btn {
+  text-align: left;
+  flex: 0 0 84px;
+  border-right: 1px solid rgba(0,0,0,0.15);
+  font-variant-numeric: tabular-nums;
+  font-size: 18px;
+  padding: 0 10px;
+}
+
+/* أزرار التراجع/التقدم */
+.history-btn {
+  flex: 0 0 38px;
+  border-right: 1px solid rgba(0,0,0,0.15);
+  font-size: 20px;
+  font-weight: 700;
+  color: inherit;
+  padding: 0;
+  text-align: center;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.history-btn:disabled {
+  opacity: 0.30;
+  pointer-events: none;
+  cursor: default;
+}
+
+/* ======= تلوين الحقل بالكامل (خلفية + نص) حسب النسبة ======= */
+.player-row[data-color="gray"] {
+  background: var(--c-gray);
+  color: #6B7280;
+}
+
+.player-row[data-color="red"] {
+  background: var(--c-red);
+  color: #ffffff;
+}
+.player-row[data-color="orange"] {
+  background: var(--c-orange);
+  color: #1a1a1a;                            /* نص أسود على البرتقالي الفاتح */
+}
+.player-row[data-color="black"] {
+  background: var(--c-black);
+  color: #ffffff;
+}
+.player-row[data-color="yellow"] {
+  background: var(--c-yellow);
+  color: #1a1a1a;                            /* نص أسود على الأصفر */
+}
+.player-row[data-color="olive"] {
+  background: var(--c-olive);
+  color: #ffffff;
+}
+.player-row[data-color="green"] {
+  background: var(--c-green);
+  color: #ffffff;
+}
+
+/* الخط الفاصل بين الاسم والرصيد يتكيّف مع لون الخلفية */
+.player-row[data-color="red"]   .balance-btn,
+.player-row[data-color="black"] .balance-btn,
+.player-row[data-color="olive"] .balance-btn,
+.player-row[data-color="green"] .balance-btn {
+  border-right-color: rgba(255,255,255,0.30);
+}
+.player-row[data-color="orange"] .balance-btn,
+.player-row[data-color="yellow"] .balance-btn {
+  border-right-color: rgba(0,0,0,0.20);
+}
+.player-row[data-color="gray"] .balance-btn {
+  border-right-color: rgba(0,0,0,0.10);
+}
+
+/* placeholder text يبقى مرئياً في كل الحالات */
+.player-row[data-color="gray"] .player-btn.placeholder { color: #9CA3AF; opacity: 1; }
+.player-row[data-color="red"]   .player-btn.placeholder,
+.player-row[data-color="black"] .player-btn.placeholder,
+.player-row[data-color="olive"] .player-btn.placeholder,
+.player-row[data-color="green"] .player-btn.placeholder { color: rgba(255,255,255,0.85); opacity: 1; }
+.player-row[data-color="orange"] .player-btn.placeholder,
+.player-row[data-color="yellow"] .player-btn.placeholder { color: rgba(0,0,0,0.60); opacity: 1; }
+
+/* الخط الفاصل بين أزرار التراجع/التقدم يتكيّف مع لون الخلفية */
+.player-row[data-color="red"]   .history-btn,
+.player-row[data-color="black"] .history-btn,
+.player-row[data-color="olive"] .history-btn,
+.player-row[data-color="green"] .history-btn {
+  border-right-color: rgba(255,255,255,0.30);
+}
+.player-row[data-color="orange"] .history-btn,
+.player-row[data-color="yellow"] .history-btn {
+  border-right-color: rgba(0,0,0,0.20);
+}
+.player-row[data-color="gray"] .history-btn {
+  border-right-color: rgba(0,0,0,0.10);
+}
+
+/* تأثير الضغط يتكيّف مع لون الخلفية (فاتح على الغامق، غامق على الفاتح) */
+.player-row[data-color="red"]   .player-btn:active,
+.player-row[data-color="black"] .player-btn:active,
+.player-row[data-color="olive"] .player-btn:active,
+.player-row[data-color="green"] .player-btn:active {
+  background: rgba(255,255,255,0.15);
+}
+.player-row[data-color="orange"] .player-btn:active,
+.player-row[data-color="yellow"] .player-btn:active,
+.player-row[data-color="gray"]   .player-btn:active {
+  background: rgba(0,0,0,0.08);
+}
+
+/* ======= التذييل ======= */
+.footer {
+  margin-top: 8px;
+  text-align: center;
+  font-size: 12px;
+  color: #666;
+  padding: 8px 0;
+  border-top: 1px solid #eee;
+}
+
+/* ======= شاشة الفائز ======= */
+#winnerScreen {
+  align-items: center;
+  justify-content: center;
+}
+
+.winner-card {
+  width: 100%;
+  max-width: 380px;
+  min-height: 480px;
+  border: 3px solid #000;
+  border-radius: 24px;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: center;
+  padding: 40px 24px;
+  text-align: center;
+}
+
+.winner-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 20px;
+}
+
+.winner-line-1 {
+  font-size: 30px;
+  font-weight: 800;
+  color: var(--winner-green);
+  margin: 0;
+}
+.winner-line-2 {
+  font-size: 28px;
+  font-weight: 800;
+  color: var(--winner-green);
+  margin: 0;
+  word-break: break-word;
+}
+.winner-line-3 {
+  font-size: 44px;
+  font-weight: 900;
+  color: var(--winner-green);
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.back-btn {
+  font-size: 18px;
+  font-weight: 600;
+  color: #000;
+  padding: 12px 20px;
+  margin-top: 20px;
+}
+.back-btn:active { opacity: 0.6; }
+
+/* ======= مربع التأكيد ======= */
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 100;
+}
+
+.confirm-box {
+  background: #fff;
+  border-radius: 16px;
+  padding: 24px 20px;
+  max-width: 320px;
+  width: 100%;
+  text-align: center;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+}
+.confirm-title {
+  margin: 0 0 8px;
+  font-size: 18px;
+  font-weight: 800;
+}
+.confirm-text {
+  margin: 0 0 20px;
+  font-size: 15px;
+  color: #444;
+}
+.confirm-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+.btn-secondary, .btn-danger, .btn-primary {
+  flex: 1;
+  font-size: 15px;
+  font-weight: 700;
+  padding: 12px 16px;
+  border-radius: 10px;
+}
+.btn-secondary { background: #f3f4f6; color: #111; }
+.btn-secondary:active { background: #e5e7eb; }
+.btn-danger { background: var(--c-red); color: #fff; }
+.btn-danger:active { opacity: 0.85; }
+.btn-primary { background: var(--winner-green); color: #fff; }
+.btn-primary:active { opacity: 0.9; }
+
+/* ======= ملاءمة للشاشات الأصغر ======= */
+@media (max-width: 380px) {
+  .title { font-size: 20px; }
+  .winner-amount-btn { font-size: 22px; }
+  .player-btn { font-size: 15px; }
+  .balance-btn { flex: 0 0 80px; }
+}
