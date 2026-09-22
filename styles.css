@@ -220,7 +220,7 @@ button {
 .name-input { text-align: right; }
 .balance-input {
   text-align: left;
-  flex: 0 0 92px;
+  flex: 0 0 84px;
   border-right: 1px solid rgba(0,0,0,0.15);
   font-variant-numeric: tabular-nums;
   font-size: 18px;
@@ -230,7 +230,14 @@ button {
 .balance-input::placeholder {
   direction: rtl;
   text-align: left;
-  font-size: 13px;
+  font-size: 12px;
+}
+
+/* زر الخصم (−) */
+.subtract-btn {
+  flex: 0 0 32px;
+  font-size: 24px;
+  font-weight: 900;
 }
 
 /* أزرار التراجع/التقدم */
@@ -470,6 +477,8 @@ button {
 @media (max-width: 380px) {
   .title { font-size: 20px; }
   .winner-amount-input { font-size: 22px; }
-  .player-input { font-size: 15px; }
-  .balance-input { flex: 0 0 84px; font-size: 16px; }
+  .player-input { font-size: 15px; padding: 0 10px; }
+  .balance-input { flex: 0 0 76px; font-size: 16px; padding: 0 6px; }
+  .history-btn { flex: 0 0 32px; font-size: 18px; }
+  .subtract-btn { flex: 0 0 28px; font-size: 22px; }
 }

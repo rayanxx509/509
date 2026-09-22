@@ -71,6 +71,20 @@ function parseNonNegativeInt(str) {
   return n;
 }
 
+// يقبل الأرقام السالبة والموجبة — للاستخدام في حقل الرصيد
+function parseSignedInt(str) {
+  if (typeof str !== 'string') return null;
+  const trimmed = str.trim();
+  if (trimmed === '') return null;
+  // نبقي على أول علامة ناقص إن وُجدت في البداية
+  const isNeg = /^-/.test(trimmed);
+  const digits = trimmed.replace(/\D/g, '');
+  if (digits === '') return null;
+  const n = parseInt(digits, 10);
+  if (Number.isNaN(n)) return null;
+  return isNeg ? -n : n;
+}
+
 function playerBalance(p) {
   if (!p) return null;
   if (p.historyIndex < 0) return null;
@@ -229,7 +243,19 @@ function renderPlayers() {
     balanceInput.value = balance === null ? '' : formatAmount(balance);
     bindBalanceInput(balanceInput, i);
 
-    // 3) زر التراجع
+    // 3) زر الخصم (−) — يفتح حقل الرصيد في وضع الخصم
+    const subBtn = document.createElement('button');
+    subBtn.type = 'button';
+    subBtn.className = 'history-btn subtract-btn';
+    subBtn.textContent = '−';
+    subBtn.setAttribute('aria-label', 'خصم من الرصيد');
+    subBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      balanceInput.dataset.mode = 'subtract';
+      balanceInput.focus();
+    });
+
+    // 4) زر التراجع
     const undoBtn = document.createElement('button');
     undoBtn.type = 'button';
     undoBtn.className = 'history-btn undo-btn';
@@ -239,7 +265,7 @@ function renderPlayers() {
     if (!canUndo) undoBtn.disabled = true;
     undoBtn.addEventListener('click', () => onUndoClick(i));
 
-    // 4) زر التقدم
+    // 5) زر التقدم
     const redoBtn = document.createElement('button');
     redoBtn.type = 'button';
     redoBtn.className = 'history-btn redo-btn';
@@ -251,6 +277,7 @@ function renderPlayers() {
 
     li.appendChild(nameInput);
     li.appendChild(balanceInput);
+    li.appendChild(subBtn);
     li.appendChild(undoBtn);
     li.appendChild(redoBtn);
     list.appendChild(li);
@@ -296,9 +323,14 @@ function bindBalanceInput(input, idx) {
     const p = state.players[idx];
     input.value = '';
     const cur = playerBalance(p);
-    input.placeholder = cur === null
-      ? 'أدخل الرصيد'
-      : `+ ${formatAmount(cur)} —  اكتب المضاف`;
+    const isSub = input.dataset.mode === 'subtract';
+    if (cur === null) {
+      input.placeholder = 'أدخل الرصيد';
+    } else if (isSub) {
+      input.placeholder = `− من ${formatAmount(cur)} — اكتب المخصوم`;
+    } else {
+      input.placeholder = `+ ${formatAmount(cur)} — اكتب المضاف`;
+    }
     setTimeout(() => {
       try { input.setSelectionRange(0, 0); } catch (_) {}
     }, 30);
@@ -307,14 +339,19 @@ function bindBalanceInput(input, idx) {
   input.addEventListener('blur', () => {
     const p = state.players[idx];
     const raw = input.value.trim();
-    const delta = parseNonNegativeInt(raw);
+    let delta = parseSignedInt(raw);
     const cur = playerBalance(p);
+    const isSub = input.dataset.mode === 'subtract';
+    delete input.dataset.mode;   // إعادة تعيين الوضع بعد كل إدخال
 
-    if (delta === null || (delta === 0 && cur !== null)) {
+    if (delta === null || delta === 0) {
       input.value = cur === null ? '' : formatAmount(cur);
       input.placeholder = cur === null ? 'الرصيد' : '';
       return;
     }
+
+    // إذا كان زر "−" مضغوطاً والمستخدم كتب رقماً موجباً → طبّق الخصم
+    if (isSub && delta > 0) delta = -delta;
 
     const newBalance = (cur === null ? 0 : cur) + delta;
     p.history = p.history.slice(0, p.historyIndex + 1);
