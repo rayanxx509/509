@@ -108,6 +108,19 @@ button {
 }
 .capital-btn:active { opacity: 0.9; }
 
+.winner-btn {
+  color: #92400e;
+  background: #FEF3C7;
+  border: 1px solid #FCD34D;
+}
+.winner-btn:active { opacity: 0.85; }
+.winner-btn:disabled {
+  color: #9ca3af;
+  background: #f9fafb;
+  border-color: #e5e7eb;
+  cursor: default;
+}
+
 /* ======= العنوان ======= */
 .title {
   text-align: center;
@@ -124,7 +137,7 @@ button {
   max-width: 260px;
 }
 
-.winner-amount-btn {
+.winner-amount-input {
   width: 100%;
   height: var(--field-height);
   border: var(--border-width) solid var(--winner-green);
@@ -134,21 +147,24 @@ button {
   color: var(--winner-green);
   background: #fff;
   text-align: center;
-  transition: transform 0.05s;
+  padding: 0 8px;
+  font-family: inherit;
+  outline: none;
+  -webkit-appearance: none;
+  appearance: none;
+  direction: ltr;
 }
-.winner-amount-btn.placeholder {
+.winner-amount-input::placeholder {
   color: var(--placeholder);
   font-size: 16px;
   font-weight: 600;
+  direction: rtl;
+  text-align: center;
+  opacity: 1;
 }
-.winner-amount-btn:active { transform: scale(0.98); }
-
-.hidden-input {
-  position: absolute;
-  opacity: 0;
-  pointer-events: none;
-  height: 0;
-  width: 0;
+.winner-amount-input:focus {
+  border-color: var(--winner-green);
+  box-shadow: 0 0 0 3px rgba(22,163,74,0.18);
 }
 
 /* ======= قائمة اللاعبين ======= */
@@ -173,7 +189,8 @@ button {
   transition: background 0.35s ease, color 0.35s ease;
 }
 
-.player-btn {
+/* حقول الاسم والرصيد كـ inputs مباشرة */
+.player-input {
   flex: 1;
   padding: 0 14px;
   font-size: 17px;
@@ -182,26 +199,38 @@ button {
   background: transparent;
   text-align: right;
   min-width: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  border: none;
+  outline: none;
+  font-family: inherit;
+  -webkit-appearance: none;
+  appearance: none;
+  border-radius: 0;
   transition: background 0.1s;
 }
-.player-btn:active { background: rgba(0,0,0,0.08); }
-.player-btn.placeholder {
+.player-input::placeholder {
   font-weight: 500;
   font-size: 14px;
-  opacity: 0.8;
+  color: inherit;
+  opacity: 0.65;
+}
+.player-input:focus {
+  background: rgba(255,255,255,0.12);
 }
 
-.name-btn { text-align: right; }
-.balance-btn {
+.name-input { text-align: right; }
+.balance-input {
   text-align: left;
-  flex: 0 0 84px;
+  flex: 0 0 92px;
   border-right: 1px solid rgba(0,0,0,0.15);
   font-variant-numeric: tabular-nums;
   font-size: 18px;
   padding: 0 10px;
+  direction: ltr;
+}
+.balance-input::placeholder {
+  direction: rtl;
+  text-align: left;
+  font-size: 13px;
 }
 
 /* أزرار التراجع/التقدم */
@@ -266,18 +295,29 @@ button {
 .player-row[data-color="yellow"] .balance-btn {
   border-right-color: rgba(0,0,0,0.20);
 }
-.player-row[data-color="gray"] .balance-btn {
+/* الفاصل بين الاسم والرصيد (input جديد) */
+.player-row[data-color="red"]   .balance-input,
+.player-row[data-color="black"] .balance-input,
+.player-row[data-color="olive"] .balance-input,
+.player-row[data-color="green"] .balance-input {
+  border-right-color: rgba(255,255,255,0.30);
+}
+.player-row[data-color="orange"] .balance-input,
+.player-row[data-color="yellow"] .balance-input {
+  border-right-color: rgba(0,0,0,0.20);
+}
+.player-row[data-color="gray"] .balance-input {
   border-right-color: rgba(0,0,0,0.10);
 }
 
 /* placeholder text يبقى مرئياً في كل الحالات */
-.player-row[data-color="gray"] .player-btn.placeholder { color: #9CA3AF; opacity: 1; }
-.player-row[data-color="red"]   .player-btn.placeholder,
-.player-row[data-color="black"] .player-btn.placeholder,
-.player-row[data-color="olive"] .player-btn.placeholder,
-.player-row[data-color="green"] .player-btn.placeholder { color: rgba(255,255,255,0.85); opacity: 1; }
-.player-row[data-color="orange"] .player-btn.placeholder,
-.player-row[data-color="yellow"] .player-btn.placeholder { color: rgba(0,0,0,0.60); opacity: 1; }
+.player-row[data-color="gray"] .player-input::placeholder { color: #9CA3AF; opacity: 1; }
+.player-row[data-color="red"]   .player-input::placeholder,
+.player-row[data-color="black"] .player-input::placeholder,
+.player-row[data-color="olive"] .player-input::placeholder,
+.player-row[data-color="green"] .player-input::placeholder { color: rgba(255,255,255,0.85); opacity: 1; }
+.player-row[data-color="orange"] .player-input::placeholder,
+.player-row[data-color="yellow"] .player-input::placeholder { color: rgba(0,0,0,0.60); opacity: 1; }
 
 /* الخط الفاصل بين أزرار التراجع/التقدم يتكيّف مع لون الخلفية */
 .player-row[data-color="red"]   .history-btn,
@@ -294,17 +334,17 @@ button {
   border-right-color: rgba(0,0,0,0.10);
 }
 
-/* تأثير الضغط يتكيّف مع لون الخلفية (فاتح على الغامق، غامق على الفاتح) */
-.player-row[data-color="red"]   .player-btn:active,
-.player-row[data-color="black"] .player-btn:active,
-.player-row[data-color="olive"] .player-btn:active,
-.player-row[data-color="green"] .player-btn:active {
+/* تأثير التركيز على input يتكيّف مع لون الخلفية */
+.player-row[data-color="red"]   .player-input:focus,
+.player-row[data-color="black"] .player-input:focus,
+.player-row[data-color="olive"] .player-input:focus,
+.player-row[data-color="green"] .player-input:focus {
   background: rgba(255,255,255,0.15);
 }
-.player-row[data-color="orange"] .player-btn:active,
-.player-row[data-color="yellow"] .player-btn:active,
-.player-row[data-color="gray"]   .player-btn:active {
-  background: rgba(0,0,0,0.08);
+.player-row[data-color="orange"] .player-input:focus,
+.player-row[data-color="yellow"] .player-input:focus,
+.player-row[data-color="gray"]   .player-input:focus {
+  background: rgba(0,0,0,0.06);
 }
 
 /* ======= التذييل ======= */
@@ -429,7 +469,7 @@ button {
 /* ======= ملاءمة للشاشات الأصغر ======= */
 @media (max-width: 380px) {
   .title { font-size: 20px; }
-  .winner-amount-btn { font-size: 22px; }
-  .player-btn { font-size: 15px; }
-  .balance-btn { flex: 0 0 80px; }
+  .winner-amount-input { font-size: 22px; }
+  .player-input { font-size: 15px; }
+  .balance-input { flex: 0 0 84px; font-size: 16px; }
 }

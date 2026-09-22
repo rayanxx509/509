@@ -1,26 +1,27 @@
 'use strict';
 
 /* ====================================================================
-   المداقش — نشرة الحكم  (v4)
+   المداقش — نشرة الحكم  (v5)
    - نسبة مئوية من مبلغ الفوز لتحديد اللون
-   - إدخال الرصيد تراكمي (إضافة على الرصيد الحالي)
+   - إدخال الرصيد تراكمي (يُضاف على الرصيد الحالي)
+   - إدخال مضمّن (Inline): بدون نوافذ منبثقة
+     • الاسم ومبلغ الفوز: عند اللمس يُحدَّد النص كاملاً — الكتابة تستبدله
+     • الرصيد: عند اللمس يفرغ الحقل ويعرض placeholder — الكتابة تُدخِل المبلغ المُضاف
+     • الحفظ يتم عند فقد التركيز (لمس أي مكان خارجي) أو زر "تم" في الكيبورد
    - سجل لكل لاعب مع أزرار تراجع/تقدم + تأكيد
-   - زر رأس المال يوزّع على الكل ويبدأ سجلاً جديداً
-   - زر مسح القائمة يمحو كل شيء
    ==================================================================== */
 
 const PLAYERS_COUNT = 10;
 const STORAGE_KEY   = 'madagish.v1';
 const REFRESH_MS    = 3000;
 
-/* عتبات الألوان بالنسبة المئوية من مبلغ الفوز */
 const COLOR_THRESHOLDS = [
-  { min: 70, color: 'green'  },  // ≥ 70%  قريب جداً من الفوز
-  { min: 50, color: 'olive'  },  // 50-69% قريب
-  { min: 35, color: 'yellow' },  // 35-49% بدأ يصعد
-  { min: 20, color: 'black'  },  // 20-34% Safe Zone
-  { min: 10, color: 'orange' },  // 10-19% منخفض
-  { min: 0,  color: 'red'    }   // 0-9%   خطر
+  { min: 70, color: 'green'  },
+  { min: 50, color: 'olive'  },
+  { min: 35, color: 'yellow' },
+  { min: 20, color: 'black'  },
+  { min: 10, color: 'orange' },
+  { min: 0,  color: 'red'    }
 ];
 
 /* ============ الحالة ============ */
@@ -31,25 +32,28 @@ function newPlayer() {
 const state = {
   winnerAmount: null,
   players: Array.from({ length: PLAYERS_COUNT }, newPlayer),
-  winnerShown: false
+  winnerShown: false,
+  currentWinnerIdx: null,          // من هو الفائز المعروض حالياً في شاشة الفوز
+  acknowledgedWinners: new Set()   // لاعبون أقرّ الحكم بفوزهم — لا نعيد الإظهار تلقائياً
 };
 
 /* ============ عناصر DOM ============ */
 const el = {
-  listScreen:        document.getElementById('listScreen'),
-  winnerScreen:      document.getElementById('winnerScreen'),
-  winnerAmountBtn:   document.getElementById('winnerAmountBtn'),
-  playersList:       document.getElementById('playersList'),
-  resetBtn:          document.getElementById('resetBtn'),
-  capitalBtn:        document.getElementById('capitalBtn'),
-  confirmOverlay:    document.getElementById('confirmOverlay'),
-  confirmTitle:      document.getElementById('confirmTitle'),
-  confirmText:       document.querySelector('#confirmOverlay .confirm-text'),
-  confirmYes:        document.getElementById('confirmYes'),
-  confirmCancel:     document.getElementById('confirmCancel'),
-  winnerName:        document.getElementById('winnerName'),
+  listScreen:          document.getElementById('listScreen'),
+  winnerScreen:        document.getElementById('winnerScreen'),
+  winnerAmountInput:   document.getElementById('winnerAmountInput'),
+  playersList:         document.getElementById('playersList'),
+  resetBtn:            document.getElementById('resetBtn'),
+  capitalBtn:          document.getElementById('capitalBtn'),
+  showWinnerBtn:       document.getElementById('showWinnerBtn'),
+  confirmOverlay:      document.getElementById('confirmOverlay'),
+  confirmTitle:        document.getElementById('confirmTitle'),
+  confirmText:         document.querySelector('#confirmOverlay .confirm-text'),
+  confirmYes:          document.getElementById('confirmYes'),
+  confirmCancel:       document.getElementById('confirmCancel'),
+  winnerName:          document.getElementById('winnerName'),
   winnerAmountDisplay: document.getElementById('winnerAmountDisplay'),
-  backBtn:           document.getElementById('backBtn')
+  backBtn:             document.getElementById('backBtn')
 };
 
 /* ============ أدوات ============ */
@@ -58,10 +62,10 @@ function formatAmount(n) {
   return `$${n}k`;
 }
 
-function safeParseInt(str) {
+function parseNonNegativeInt(str) {
   if (typeof str !== 'string') return null;
-  const clean = str.replace(/[^\d-]/g, '');
-  if (clean === '' || clean === '-') return null;
+  const clean = str.replace(/\D/g, '');
+  if (clean === '') return null;
   const n = parseInt(clean, 10);
   if (Number.isNaN(n)) return null;
   return n;
@@ -78,7 +82,8 @@ function saveState() {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({
       winnerAmount: state.winnerAmount,
-      players: state.players
+      players: state.players,
+      acknowledgedWinners: Array.from(state.acknowledgedWinners)
     }));
   } catch (_) { /* تجاهل */ }
 }
@@ -90,13 +95,17 @@ function loadState() {
     const data = JSON.parse(raw);
     if (typeof data !== 'object' || data === null) return;
     if (typeof data.winnerAmount === 'number') state.winnerAmount = data.winnerAmount;
+    if (Array.isArray(data.acknowledgedWinners)) {
+      state.acknowledgedWinners = new Set(
+        data.acknowledgedWinners.filter(n => typeof n === 'number' && n >= 0 && n < PLAYERS_COUNT)
+      );
+    }
     if (Array.isArray(data.players)) {
       for (let i = 0; i < PLAYERS_COUNT; i++) {
         const p = data.players[i];
         if (!p || typeof p !== 'object') continue;
         state.players[i].name = (typeof p.name === 'string' && p.name.trim()) ? p.name : null;
 
-        // النسخة الجديدة (history + historyIndex)
         if (Array.isArray(p.history) && typeof p.historyIndex === 'number') {
           const clean = p.history.filter(v => typeof v === 'number' && !Number.isNaN(v));
           state.players[i].history = clean;
@@ -105,8 +114,6 @@ function loadState() {
             : Math.min(Math.max(0, p.historyIndex), clean.length - 1);
           continue;
         }
-
-        // ترحيل من النسخة القديمة (balance فقط)
         if (typeof p.balance === 'number') {
           state.players[i].history = [p.balance];
           state.players[i].historyIndex = 0;
@@ -140,18 +147,48 @@ function computeColors() {
   return colors;
 }
 
-/* ============ الرسم ============ */
-function renderWinnerAmount() {
-  const btn = el.winnerAmountBtn;
-  if (state.winnerAmount === null) {
-    btn.textContent = 'ادخل مبلغ الفوز';
-    btn.classList.add('placeholder');
-  } else {
-    btn.textContent = formatAmount(state.winnerAmount);
-    btn.classList.remove('placeholder');
-  }
+/* ============ حقل مبلغ الفوز (Inline) ============ */
+function displayWinnerAmount() {
+  const input = el.winnerAmountInput;
+  if (input === document.activeElement) return; // لا تلمسه أثناء الكتابة
+  input.value = state.winnerAmount === null ? '' : formatAmount(state.winnerAmount);
 }
 
+function bindWinnerAmountInput() {
+  const input = el.winnerAmountInput;
+
+  input.addEventListener('focus', () => {
+    input.value = state.winnerAmount === null ? '' : String(state.winnerAmount);
+    setTimeout(() => {
+      try { input.select(); }
+      catch (_) { try { input.setSelectionRange(0, input.value.length); } catch (__) {} }
+    }, 30);
+  });
+
+  input.addEventListener('blur', () => {
+    const val = parseNonNegativeInt(input.value);
+    const oldAmount = state.winnerAmount;
+    if (val !== null && val > 0) {
+      state.winnerAmount = val;
+    }
+    // إذا تغيّر مبلغ الفوز → مرجع جديد، ألغِ كل الإقرارات
+    if (state.winnerAmount !== oldAmount) {
+      state.acknowledgedWinners.clear();
+      state.winnerShown = false;
+    }
+    saveState();
+    displayWinnerAmount();
+    applyColorsToRows();
+    updateManualWinnerBtnState();
+    checkWinner();
+  });
+
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+  });
+}
+
+/* ============ صفوف اللاعبين (Inline) ============ */
 function renderPlayers() {
   const colors = computeColors();
   const list = el.playersList;
@@ -166,109 +203,150 @@ function renderPlayers() {
     li.setAttribute('data-color', colors[i]);
     li.setAttribute('data-idx', String(i));
 
-    // 1) زر الاسم (يمين في RTL)
-    const nameBtn = document.createElement('button');
-    nameBtn.type = 'button';
-    nameBtn.className = 'player-btn name-btn';
-    if (!p.name) {
-      nameBtn.textContent = 'ادخل اسم اللاعب هنا';
-      nameBtn.classList.add('placeholder');
-    } else {
-      nameBtn.textContent = p.name;
-    }
-    nameBtn.addEventListener('click', () => promptName(i));
+    // 1) حقل الاسم
+    const nameInput = document.createElement('input');
+    nameInput.type = 'text';
+    nameInput.className = 'player-input name-input';
+    nameInput.placeholder = 'ادخل اسم اللاعب هنا';
+    nameInput.setAttribute('enterkeyhint', 'done');
+    nameInput.setAttribute('autocomplete', 'off');
+    nameInput.dataset.idx = String(i);
+    nameInput.dataset.kind = 'name';
+    nameInput.value = p.name || '';
+    bindNameInput(nameInput, i);
 
-    // 2) زر الرصيد
-    const balanceBtn = document.createElement('button');
-    balanceBtn.type = 'button';
-    balanceBtn.className = 'player-btn balance-btn';
-    if (balance === null) {
-      balanceBtn.textContent = 'الرصيد';
-      balanceBtn.classList.add('placeholder');
-    } else {
-      balanceBtn.textContent = formatAmount(balance);
-    }
-    balanceBtn.addEventListener('click', () => promptBalanceAdd(i));
+    // 2) حقل الرصيد
+    const balanceInput = document.createElement('input');
+    balanceInput.type = 'tel';
+    balanceInput.className = 'player-input balance-input';
+    balanceInput.setAttribute('inputmode', 'numeric');
+    balanceInput.setAttribute('pattern', '[0-9]*');
+    balanceInput.setAttribute('enterkeyhint', 'done');
+    balanceInput.setAttribute('autocomplete', 'off');
+    balanceInput.placeholder = balance === null ? 'الرصيد' : '';
+    balanceInput.dataset.idx = String(i);
+    balanceInput.dataset.kind = 'balance';
+    balanceInput.value = balance === null ? '' : formatAmount(balance);
+    bindBalanceInput(balanceInput, i);
 
-    // 3) زر التراجع (للخلف)
+    // 3) زر التراجع
     const undoBtn = document.createElement('button');
     undoBtn.type = 'button';
-    undoBtn.className = 'player-btn history-btn undo-btn';
+    undoBtn.className = 'history-btn undo-btn';
     undoBtn.textContent = '↶';
     undoBtn.setAttribute('aria-label', 'تراجع');
     const canUndo = p.historyIndex > 0;
     if (!canUndo) undoBtn.disabled = true;
     undoBtn.addEventListener('click', () => onUndoClick(i));
 
-    // 4) زر التقدم (للأمام)
+    // 4) زر التقدم
     const redoBtn = document.createElement('button');
     redoBtn.type = 'button';
-    redoBtn.className = 'player-btn history-btn redo-btn';
+    redoBtn.className = 'history-btn redo-btn';
     redoBtn.textContent = '↷';
     redoBtn.setAttribute('aria-label', 'تقدم');
     const canRedo = p.historyIndex >= 0 && p.historyIndex < p.history.length - 1;
     if (!canRedo) redoBtn.disabled = true;
     redoBtn.addEventListener('click', () => onRedoClick(i));
 
-    li.appendChild(nameBtn);
-    li.appendChild(balanceBtn);
+    li.appendChild(nameInput);
+    li.appendChild(balanceInput);
     li.appendChild(undoBtn);
     li.appendChild(redoBtn);
     list.appendChild(li);
   }
 }
 
-function render() {
-  renderWinnerAmount();
-  renderPlayers();
-  checkWinner();
+function applyColorsToRows() {
+  const colors = computeColors();
+  document.querySelectorAll('.player-row').forEach((row, i) => {
+    row.setAttribute('data-color', colors[i]);
+  });
 }
 
-/* ============ إدخال البيانات ============ */
-function promptWinnerAmount() {
-  const current = state.winnerAmount === null ? '' : String(state.winnerAmount);
-  const val = window.prompt('أدخل مبلغ الفوز (رقم فقط، بالآلاف):', current);
-  if (val === null) return;
-  const parsed = safeParseInt(val);
-  state.winnerAmount = parsed;
-  saveState();
-  render();
-}
-
-function promptName(idx) {
-  const cur = state.players[idx].name || '';
-  const val = window.prompt('اسم اللاعب:', cur);
-  if (val === null) return;
-  const trimmed = val.trim();
-  state.players[idx].name = trimmed === '' ? null : trimmed;
-  saveState();
-  render();
-}
-
-/* إدخال الرصيد بالإضافة على الرصيد الحالي */
-function promptBalanceAdd(idx) {
+function updateHistoryButtons(idx) {
   const p = state.players[idx];
-  const current = playerBalance(p);
-  const hint = current === null
-    ? 'أدخل الرصيد الابتدائي (رقم فقط، بالآلاف):'
-    : `الرصيد الحالي ${formatAmount(current)} — أدخل المبلغ ليضاف إليه:`;
+  const row = document.querySelector(`.player-row[data-idx="${idx}"]`);
+  if (!row) return;
+  const undo = row.querySelector('.undo-btn');
+  const redo = row.querySelector('.redo-btn');
+  if (undo) undo.disabled = !(p.historyIndex > 0);
+  if (redo) redo.disabled = !(p.historyIndex >= 0 && p.historyIndex < p.history.length - 1);
+}
 
-  const val = window.prompt(hint, '');
-  if (val === null) return;                 // إلغاء
-  const delta = safeParseInt(val);
-  if (delta === null) return;               // لا رقم
-  if (delta === 0 && current !== null) return; // لا تغيير
+function bindNameInput(input, idx) {
+  input.addEventListener('focus', () => {
+    setTimeout(() => {
+      try { input.select(); }
+      catch (_) { try { input.setSelectionRange(0, input.value.length); } catch (__) {} }
+    }, 30);
+  });
+  input.addEventListener('blur', () => {
+    const v = input.value.trim();
+    state.players[idx].name = v === '' ? null : v;
+    saveState();
+  });
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+  });
+}
 
-  const newBalance = (current === null ? 0 : current) + delta;
+function bindBalanceInput(input, idx) {
+  input.addEventListener('focus', () => {
+    const p = state.players[idx];
+    input.value = '';
+    const cur = playerBalance(p);
+    input.placeholder = cur === null
+      ? 'أدخل الرصيد'
+      : `+ ${formatAmount(cur)} —  اكتب المضاف`;
+    setTimeout(() => {
+      try { input.setSelectionRange(0, 0); } catch (_) {}
+    }, 30);
+  });
 
-  // اقطع أي مستقبل (redo entries)، ثم أضف النقطة الجديدة
-  p.history = p.history.slice(0, p.historyIndex + 1);
-  p.history.push(newBalance);
-  p.historyIndex = p.history.length - 1;
+  input.addEventListener('blur', () => {
+    const p = state.players[idx];
+    const raw = input.value.trim();
+    const delta = parseNonNegativeInt(raw);
+    const cur = playerBalance(p);
 
-  state.winnerShown = false;                 // نسمح بظهور شاشة الفائز من جديد
-  saveState();
-  render();
+    if (delta === null || (delta === 0 && cur !== null)) {
+      input.value = cur === null ? '' : formatAmount(cur);
+      input.placeholder = cur === null ? 'الرصيد' : '';
+      return;
+    }
+
+    const newBalance = (cur === null ? 0 : cur) + delta;
+    p.history = p.history.slice(0, p.historyIndex + 1);
+    p.history.push(newBalance);
+    p.historyIndex = p.history.length - 1;
+
+    state.winnerShown = false;
+    saveState();
+
+    // إذا كان اللاعب مقرَّاً به سابقاً ثم تجاوز مجدداً — checkWinner يعالج الحالة
+    // (لأن هذا الرصيد الجديد قد يكون أعلى، لكن لا يزال مُقَرّاً به)
+    // لا نلغي الإقرار هنا لأنه فوق العتبة أصلاً — checkWinner لا يمسحه إلا إذا نزل تحتها
+
+    // تحديث في المكان بدون إعادة رسم كامل (يحفظ التركيز إذا انتقل المستخدم لحقل آخر)
+    input.value = formatAmount(newBalance);
+    input.placeholder = '';
+    applyColorsToRows();
+    updateHistoryButtons(idx);
+    updateManualWinnerBtnState();
+    checkWinner();
+  });
+
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+  });
+}
+
+function render() {
+  displayWinnerAmount();
+  renderPlayers();
+  updateManualWinnerBtnState();
+  checkWinner();
 }
 
 /* ============ التراجع / التقدم ============ */
@@ -311,31 +389,78 @@ function onRedoClick(idx) {
 
 /* ============ رأس المال ============ */
 function promptCapital() {
-  const val = window.prompt('رأس المال — سيوزّع على كل اللاعبين العشرة (رقم فقط، بالآلاف):', '');
-  if (val === null) return;
-  const parsed = safeParseInt(val);
-  if (parsed === null) return;
-  // ابدأ سجلاً جديداً لكل لاعب برأس المال المدخل
-  for (let i = 0; i < PLAYERS_COUNT; i++) {
-    state.players[i].history = [parsed];
-    state.players[i].historyIndex = 0;
-  }
-  state.winnerShown = false;
-  saveState();
-  render();
+  showPromptModal({
+    title: 'رأس المال',
+    body:  'سيوزّع على كل اللاعبين العشرة. اكتب المبلغ بالآلاف:',
+    okText: 'تطبيق',
+    inputType: 'tel',
+    placeholder: 'مثال: 20',
+    onOk: (val) => {
+      const parsed = parseNonNegativeInt(val);
+      if (parsed === null) return;
+      for (let i = 0; i < PLAYERS_COUNT; i++) {
+        state.players[i].history = [parsed];
+        state.players[i].historyIndex = 0;
+      }
+      state.acknowledgedWinners.clear();
+      state.winnerShown = false;
+      saveState();
+      render();
+    }
+  });
 }
 
 /* ============ الفائز ============ */
 function checkWinner() {
-  if (state.winnerAmount === null) return;
+  const w = state.winnerAmount;
+  if (w === null) return;
   if (state.winnerShown) return;
+
   for (let i = 0; i < PLAYERS_COUNT; i++) {
     const b = playerBalance(state.players[i]);
-    if (b !== null && b >= state.winnerAmount) {
-      showWinner(i);
-      return;
+    if (b === null) continue;
+    if (b >= w) {
+      // فوق العتبة: اعرض الشاشة إذا لم يُقَرَّ به بعد
+      if (!state.acknowledgedWinners.has(i)) {
+        showWinner(i);
+        return;
+      }
+    } else {
+      // تحت العتبة: إذا كان مُقَرّاً به سابقاً، ألغِ الإقرار
+      // بحيث لو صعد فوق العتبة مجدداً تظهر الشاشة تلقائياً
+      if (state.acknowledgedWinners.has(i)) {
+        state.acknowledgedWinners.delete(i);
+        saveState();
+      }
     }
   }
+}
+
+// إظهار يدوي: يبحث عن أي لاعب فوق العتبة (يتجاهل الإقرار) ويفتح شاشته
+function showAnyWinnerManually() {
+  const w = state.winnerAmount;
+  if (w === null) return false;
+  for (let i = 0; i < PLAYERS_COUNT; i++) {
+    const b = playerBalance(state.players[i]);
+    if (b !== null && b >= w) {
+      showWinner(i);
+      return true;
+    }
+  }
+  return false;
+}
+
+function updateManualWinnerBtnState() {
+  if (!el.showWinnerBtn) return;
+  const w = state.winnerAmount;
+  let candidate = false;
+  if (w !== null) {
+    for (let i = 0; i < PLAYERS_COUNT; i++) {
+      const b = playerBalance(state.players[i]);
+      if (b !== null && b >= w) { candidate = true; break; }
+    }
+  }
+  el.showWinnerBtn.disabled = !candidate;
 }
 
 function showWinner(idx) {
@@ -346,16 +471,24 @@ function showWinner(idx) {
   el.winnerScreen.classList.remove('hidden');
   el.winnerScreen.setAttribute('aria-hidden', 'false');
   state.winnerShown = true;
+  state.currentWinnerIdx = idx;
 }
 
 function hideWinner() {
+  // أقرَّ الحكم برؤية هذا الفائز — لا نعيد إظهاره تلقائياً
+  if (state.currentWinnerIdx !== null && state.currentWinnerIdx >= 0) {
+    state.acknowledgedWinners.add(state.currentWinnerIdx);
+    saveState();
+  }
   el.winnerScreen.classList.add('hidden');
   el.winnerScreen.setAttribute('aria-hidden', 'true');
   el.listScreen.classList.remove('hidden');
   state.winnerShown = false;
+  state.currentWinnerIdx = null;
+  updateManualWinnerBtnState();
 }
 
-/* ============ صندوق التأكيد العام ============ */
+/* ============ صندوق التأكيد + Prompt المضمّن ============ */
 let pendingConfirmAction = null;
 
 function showConfirm(opts) {
@@ -364,14 +497,49 @@ function showConfirm(opts) {
   el.confirmYes.textContent   = opts.okText || 'نعم';
   el.confirmYes.className = opts.danger ? 'btn-danger' : 'btn-primary';
   pendingConfirmAction = typeof opts.onOk === 'function' ? opts.onOk : null;
+  const existingInput = document.getElementById('confirmInlineInput');
+  if (existingInput) existingInput.remove();
   el.confirmOverlay.classList.remove('hidden');
   el.confirmOverlay.setAttribute('aria-hidden', 'false');
+}
+
+function showPromptModal(opts) {
+  el.confirmTitle.textContent = opts.title || 'إدخال';
+  el.confirmText.textContent  = opts.body  || '';
+  el.confirmYes.textContent   = opts.okText || 'موافق';
+  el.confirmYes.className = 'btn-primary';
+
+  let inp = document.getElementById('confirmInlineInput');
+  if (!inp) {
+    inp = document.createElement('input');
+    inp.id = 'confirmInlineInput';
+    inp.style.cssText = 'width:100%;padding:12px;font-size:18px;border:2px solid #d1d5db;border-radius:8px;margin:12px 0 16px;text-align:center;font-weight:700;font-family:inherit;outline:none;box-sizing:border-box;';
+    el.confirmText.insertAdjacentElement('afterend', inp);
+  }
+  inp.type = opts.inputType || 'text';
+  if (opts.inputType === 'tel') {
+    inp.setAttribute('inputmode', 'numeric');
+    inp.setAttribute('pattern', '[0-9]*');
+  }
+  inp.value = opts.initial || '';
+  inp.placeholder = opts.placeholder || '';
+
+  pendingConfirmAction = () => {
+    const v = inp.value;
+    if (typeof opts.onOk === 'function') opts.onOk(v);
+  };
+
+  el.confirmOverlay.classList.remove('hidden');
+  el.confirmOverlay.setAttribute('aria-hidden', 'false');
+  setTimeout(() => { try { inp.focus(); inp.select(); } catch (_) {} }, 100);
 }
 
 function closeConfirm() {
   pendingConfirmAction = null;
   el.confirmOverlay.classList.add('hidden');
   el.confirmOverlay.setAttribute('aria-hidden', 'true');
+  const inp = document.getElementById('confirmInlineInput');
+  if (inp) inp.remove();
 }
 
 function runConfirmAction() {
@@ -399,17 +567,35 @@ function resetAll() {
     state.players[i].history = [];
     state.players[i].historyIndex = -1;
   }
+  state.acknowledgedWinners.clear();
   state.winnerShown = false;
+  state.currentWinnerIdx = null;
   saveState();
-  hideWinner();
+  // إغلاق شاشة الفوز إذا كانت مفتوحة، بدون إقرار (كل شيء مُمسَح)
+  el.winnerScreen.classList.add('hidden');
+  el.winnerScreen.setAttribute('aria-hidden', 'true');
+  el.listScreen.classList.remove('hidden');
   render();
+}
+
+/* ============ اللمس خارج الحقل لإغلاق الكيبورد ============ */
+function bindOutsideTapDismiss() {
+  document.addEventListener('pointerdown', (e) => {
+    const active = document.activeElement;
+    if (!active || !(active instanceof HTMLInputElement)) return;
+    if (e.target === active) return;
+    if (e.target instanceof HTMLInputElement) return;   // انتقال بين حقول
+    if (e.target instanceof HTMLButtonElement) return;  // زر undo/redo/reset/capital يقوم بالباقي
+    active.blur();
+  });
 }
 
 /* ============ الأحداث ============ */
 function bindEvents() {
-  el.winnerAmountBtn.addEventListener('click', promptWinnerAmount);
+  bindWinnerAmountInput();
   el.resetBtn.addEventListener('click', askReset);
   el.capitalBtn.addEventListener('click', promptCapital);
+  el.showWinnerBtn.addEventListener('click', () => { showAnyWinnerManually(); });
 
   el.confirmCancel.addEventListener('click', closeConfirm);
   el.confirmYes.addEventListener('click', runConfirmAction);
@@ -418,18 +604,14 @@ function bindEvents() {
   });
   el.backBtn.addEventListener('click', hideWinner);
 
+  bindOutsideTapDismiss();
+
+  // إعادة تقييم الألوان دورياً بدون تدمير التركيز
   setInterval(() => {
-    renderPlayers();
+    applyColorsToRows();
+    updateManualWinnerBtnState();
     checkWinner();
   }, REFRESH_MS);
-
-  // منع Double-tap zoom على iOS
-  let lastTouch = 0;
-  document.addEventListener('touchend', (e) => {
-    const now = Date.now();
-    if (now - lastTouch <= 300) e.preventDefault();
-    lastTouch = now;
-  }, { passive: false });
 }
 
 /* ============ الإقلاع ============ */

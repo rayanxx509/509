@@ -22,6 +22,9 @@
         <button id="resetBtn" class="top-btn reset-btn" type="button" aria-label="مسح القائمة">
           مسح القائمة
         </button>
+        <button id="showWinnerBtn" class="top-btn winner-btn" type="button" aria-label="عرض شاشة الفائز" disabled>
+          الفائز
+        </button>
         <button id="capitalBtn" class="top-btn capital-btn" type="button" aria-label="رأس المال">
           رأس المال
         </button>
@@ -30,10 +33,10 @@
       <h1 class="title">مبلغ الفائز</h1>
 
       <div class="winner-amount">
-        <button id="winnerAmountBtn" class="winner-amount-btn placeholder" type="button">
-          ادخل مبلغ الفوز
-        </button>
-        <input id="winnerAmountInput" class="hidden-input" type="tel" inputmode="numeric" pattern="[0-9]*" maxlength="6" />
+        <input id="winnerAmountInput" class="winner-amount-input"
+               type="tel" inputmode="numeric" pattern="[0-9]*" maxlength="7"
+               enterkeyhint="done" autocomplete="off"
+               placeholder="ادخل مبلغ الفوز" />
       </div>
 
       <ul id="playersList" class="players-list" aria-label="قائمة اللاعبين"></ul>
