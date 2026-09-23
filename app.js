@@ -11,10 +11,12 @@
    - شاشة فوز بنظام الإقرار + زر "الفائز" اليدوي
    ==================================================================== */
 
+const APP_VERSION    = 9;              // يجب أن يطابق version.json و ?v= في index.html
 const PLAYERS_COUNT  = 10;
 const STORAGE_KEY    = 'madagish.v1';
 const REFRESH_MS     = 3000;
 const ACTION_LOG_MAX = 200;
+const UPDATE_CHECK_MS = 60000;         // فحص التحديثات كل دقيقة
 
 const COLOR_THRESHOLDS = [
   { min: 70, color: 'green'  },
@@ -754,11 +756,49 @@ function bindEvents() {
   }, REFRESH_MS);
 }
 
+/* ============ التحديث التلقائي (كسر كاش الجوال) ============ */
+function startUpdateChecker() {
+  function isUserBusy() {
+    const a = document.activeElement;
+    if (a && a instanceof HTMLInputElement) return true;                     // يكتب الآن
+    if (!el.confirmOverlay.classList.contains('hidden')) return true;        // نافذة تأكيد مفتوحة
+    return false;
+  }
+
+  async function check() {
+    try {
+      // cache: no-store + طابع زمني = يتجاوز كل أنواع الكاش حتى على iOS
+      const res = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
+      if (!res.ok) return;
+      const data = await res.json();
+      if (!data || typeof data.v !== 'number') return;
+      if (data.v === APP_VERSION) return;
+
+      // منع حلقة تحديث لا نهائية لو تأخر انتشار الملفات
+      const tag = 'madagish.reloadedFor.' + data.v;
+      try { if (sessionStorage.getItem(tag)) return; } catch (_) {}
+
+      if (isUserBusy()) { setTimeout(check, 20000); return; }               // أجّل حتى يفرغ الحكم
+
+      try { sessionStorage.setItem(tag, '1'); } catch (_) {}
+      location.reload();                                                     // البيانات آمنة في localStorage
+    } catch (_) { /* أوفلاين أو خطأ شبكة — تجاهل بصمت */ }
+  }
+
+  check();
+  setInterval(check, UPDATE_CHECK_MS);
+  // أهم لحظة على الجوال: عودة المستخدم للتبويب/التطبيق من الخلفية
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') check();
+  });
+}
+
 /* ============ الإقلاع ============ */
 function init() {
   loadState();
   bindEvents();
   render();
+  startUpdateChecker();
 }
 
 if (document.readyState === 'loading') {
