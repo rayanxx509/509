@@ -32,11 +32,17 @@
 
       <h1 class="title">مبلغ الفائز</h1>
 
-      <div class="winner-amount">
+      <div class="winner-amount-row">
+        <button id="globalRedoBtn" class="global-history-btn" type="button" aria-label="تقدم" disabled>
+          تقدم ↷
+        </button>
         <input id="winnerAmountInput" class="winner-amount-input"
                type="tel" inputmode="numeric" pattern="[0-9]*" maxlength="7"
                enterkeyhint="done" autocomplete="off"
                placeholder="ادخل مبلغ الفوز" />
+        <button id="globalUndoBtn" class="global-history-btn" type="button" aria-label="تراجع" disabled>
+          ↶ تراجع
+        </button>
       </div>
 
       <ul id="playersList" class="players-list" aria-label="قائمة اللاعبين"></ul>

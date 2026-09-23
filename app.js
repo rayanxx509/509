@@ -1,19 +1,20 @@
 'use strict';
 
 /* ====================================================================
-   المداقش — نشرة الحكم  (v5)
-   - نسبة مئوية من مبلغ الفوز لتحديد اللون
-   - إدخال الرصيد تراكمي (يُضاف على الرصيد الحالي)
-   - إدخال مضمّن (Inline): بدون نوافذ منبثقة
-     • الاسم ومبلغ الفوز: عند اللمس يُحدَّد النص كاملاً — الكتابة تستبدله
-     • الرصيد: عند اللمس يفرغ الحقل ويعرض placeholder — الكتابة تُدخِل المبلغ المُضاف
-     • الحفظ يتم عند فقد التركيز (لمس أي مكان خارجي) أو زر "تم" في الكيبورد
-   - سجل لكل لاعب مع أزرار تراجع/تقدم + تأكيد
+   المداقش — نشرة الحكم  (v7)
+   - نسبة مئوية من مبلغ الفوز لتحديد اللون + خلفيات مصوّرة مخصصة
+   - رصيد سالب → خلفية "السالب" + نص أحمر ساطع
+   - إدخال الرصيد تراكمي (يُضاف/يُخصم على الرصيد الحالي) + زر − للخصم
+   - إدخال مضمّن بدون نوافذ منبثقة
+   - ترتيب تلقائي حي: الأعلى رصيداً فوق، الحقول بلا اسم رمادية بالأسفل
+   - تراجع/تقدم عام (زران حول حقل مبلغ الفوز) لآخر تعديلات الرصيد
+   - شاشة فوز بنظام الإقرار + زر "الفائز" اليدوي
    ==================================================================== */
 
-const PLAYERS_COUNT = 10;
-const STORAGE_KEY   = 'madagish.v1';
-const REFRESH_MS    = 3000;
+const PLAYERS_COUNT  = 10;
+const STORAGE_KEY    = 'madagish.v1';
+const REFRESH_MS     = 3000;
+const ACTION_LOG_MAX = 200;
 
 const COLOR_THRESHOLDS = [
   { min: 70, color: 'green'  },
@@ -26,15 +27,17 @@ const COLOR_THRESHOLDS = [
 
 /* ============ الحالة ============ */
 function newPlayer() {
-  return { name: null, history: [], historyIndex: -1 };
+  return { name: null, balance: null };
 }
 
 const state = {
   winnerAmount: null,
   players: Array.from({ length: PLAYERS_COUNT }, newPlayer),
+  actionLog: [],                   // سجل تعديلات الرصيد: {type:'balance',idx,from,to} أو {type:'capital',changes:[...]}
+  actionIndex: -1,                 // مؤشر آخر تعديل مُطبَّق
   winnerShown: false,
-  currentWinnerIdx: null,          // من هو الفائز المعروض حالياً في شاشة الفوز
-  acknowledgedWinners: new Set()   // لاعبون أقرّ الحكم بفوزهم — لا نعيد الإظهار تلقائياً
+  currentWinnerIdx: null,
+  acknowledgedWinners: new Set()
 };
 
 /* ============ عناصر DOM ============ */
@@ -46,6 +49,8 @@ const el = {
   resetBtn:            document.getElementById('resetBtn'),
   capitalBtn:          document.getElementById('capitalBtn'),
   showWinnerBtn:       document.getElementById('showWinnerBtn'),
+  globalUndoBtn:       document.getElementById('globalUndoBtn'),
+  globalRedoBtn:       document.getElementById('globalRedoBtn'),
   confirmOverlay:      document.getElementById('confirmOverlay'),
   confirmTitle:        document.getElementById('confirmTitle'),
   confirmText:         document.querySelector('#confirmOverlay .confirm-text'),
@@ -76,7 +81,6 @@ function parseSignedInt(str) {
   if (typeof str !== 'string') return null;
   const trimmed = str.trim();
   if (trimmed === '') return null;
-  // نبقي على أول علامة ناقص إن وُجدت في البداية
   const isNeg = /^-/.test(trimmed);
   const digits = trimmed.replace(/\D/g, '');
   if (digits === '') return null;
@@ -87,8 +91,38 @@ function parseSignedInt(str) {
 
 function playerBalance(p) {
   if (!p) return null;
-  if (p.historyIndex < 0) return null;
-  return p.history[p.historyIndex];
+  return p.balance;
+}
+
+function playerLabel(idx) {
+  return state.players[idx].name || `اللاعب ${idx + 1}`;
+}
+
+/* ============ ضبط عرض كبسولة الاسم على مقاس النص ============ */
+let nameMeasurer = null;
+function ensureNameMeasurer() {
+  if (nameMeasurer) return nameMeasurer;
+  nameMeasurer = document.createElement('span');
+  nameMeasurer.style.cssText =
+    'position:absolute;visibility:hidden;white-space:pre;top:-9999px;left:-9999px;pointer-events:none;';
+  document.body.appendChild(nameMeasurer);
+  return nameMeasurer;
+}
+
+function fitNameInput(input) {
+  const m = ensureNameMeasurer();
+  const cs = getComputedStyle(input);
+  const usingPlaceholder = !input.value;
+  m.style.fontFamily = cs.fontFamily;
+  m.style.fontSize   = usingPlaceholder ? '13px' : cs.fontSize;
+  m.style.fontWeight = usingPlaceholder ? '500'  : cs.fontWeight;
+  m.textContent = input.value || input.placeholder || '';
+  const w = m.offsetWidth + 28;   // padding الكبسولة + هامش صغير
+  input.style.width = w + 'px';
+}
+
+function fitAllNameInputs() {
+  document.querySelectorAll('.name-input').forEach(inp => fitNameInput(inp));
 }
 
 /* ============ التخزين + الترحيل ============ */
@@ -97,6 +131,8 @@ function saveState() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({
       winnerAmount: state.winnerAmount,
       players: state.players,
+      actionLog: state.actionLog,
+      actionIndex: state.actionIndex,
       acknowledgedWinners: Array.from(state.acknowledgedWinners)
     }));
   } catch (_) { /* تجاهل */ }
@@ -114,27 +150,103 @@ function loadState() {
         data.acknowledgedWinners.filter(n => typeof n === 'number' && n >= 0 && n < PLAYERS_COUNT)
       );
     }
+    if (Array.isArray(data.actionLog) && typeof data.actionIndex === 'number') {
+      state.actionLog = data.actionLog.filter(a => a && typeof a === 'object');
+      state.actionIndex = Math.min(Math.max(-1, data.actionIndex), state.actionLog.length - 1);
+    }
     if (Array.isArray(data.players)) {
       for (let i = 0; i < PLAYERS_COUNT; i++) {
         const p = data.players[i];
         if (!p || typeof p !== 'object') continue;
         state.players[i].name = (typeof p.name === 'string' && p.name.trim()) ? p.name : null;
 
-        if (Array.isArray(p.history) && typeof p.historyIndex === 'number') {
-          const clean = p.history.filter(v => typeof v === 'number' && !Number.isNaN(v));
-          state.players[i].history = clean;
-          state.players[i].historyIndex = clean.length === 0
-            ? -1
-            : Math.min(Math.max(0, p.historyIndex), clean.length - 1);
+        // النموذج الجديد: balance مباشرة
+        if (typeof p.balance === 'number' && !Number.isNaN(p.balance)) {
+          state.players[i].balance = p.balance;
           continue;
         }
-        if (typeof p.balance === 'number') {
-          state.players[i].history = [p.balance];
-          state.players[i].historyIndex = 0;
+        // ترحيل من نموذج history القديم
+        if (Array.isArray(p.history) && typeof p.historyIndex === 'number' &&
+            p.historyIndex >= 0 && p.historyIndex < p.history.length) {
+          const b = p.history[p.historyIndex];
+          if (typeof b === 'number' && !Number.isNaN(b)) state.players[i].balance = b;
         }
       }
     }
   } catch (_) { /* تجاهل */ }
+}
+
+/* ============ سجل التعديلات العام (تراجع/تقدم) ============ */
+function recordAction(action) {
+  state.actionLog = state.actionLog.slice(0, state.actionIndex + 1);
+  state.actionLog.push(action);
+  if (state.actionLog.length > ACTION_LOG_MAX) {
+    state.actionLog = state.actionLog.slice(state.actionLog.length - ACTION_LOG_MAX);
+  }
+  state.actionIndex = state.actionLog.length - 1;
+}
+
+function applyActionValues(action, useFrom) {
+  if (action.type === 'balance') {
+    state.players[action.idx].balance = useFrom ? action.from : action.to;
+  } else if (action.type === 'capital') {
+    for (const c of action.changes) {
+      state.players[c.idx].balance = useFrom ? c.from : c.to;
+    }
+  }
+}
+
+function describeAction(action, useFrom) {
+  if (action.type === 'balance') {
+    const target = useFrom ? action.from : action.to;
+    const t = target === null ? 'فارغ' : formatAmount(target);
+    return `رصيد "${playerLabel(action.idx)}" إلى ${t}`;
+  }
+  if (action.type === 'capital') {
+    return useFrom ? 'إلغاء توزيع رأس المال (يرجع الجميع لما قبله)' : 'إعادة توزيع رأس المال على الجميع';
+  }
+  return '';
+}
+
+function globalUndo() {
+  if (state.actionIndex < 0) return;
+  const action = state.actionLog[state.actionIndex];
+  showConfirm({
+    title: 'تأكيد التراجع',
+    body:  `هل تريد إرجاع ${describeAction(action, true)}؟`,
+    okText: 'نعم، تراجع',
+    danger: false,
+    onOk: () => {
+      applyActionValues(action, true);
+      state.actionIndex -= 1;
+      state.winnerShown = false;
+      saveState();
+      refreshAfterBalanceChange();
+    }
+  });
+}
+
+function globalRedo() {
+  if (state.actionIndex >= state.actionLog.length - 1) return;
+  const action = state.actionLog[state.actionIndex + 1];
+  showConfirm({
+    title: 'تأكيد التقدم',
+    body:  `هل تريد تقديم ${describeAction(action, false)}؟`,
+    okText: 'نعم، تقدم',
+    danger: false,
+    onOk: () => {
+      applyActionValues(action, false);
+      state.actionIndex += 1;
+      state.winnerShown = false;
+      saveState();
+      refreshAfterBalanceChange();
+    }
+  });
+}
+
+function updateGlobalHistoryButtons() {
+  if (el.globalUndoBtn) el.globalUndoBtn.disabled = state.actionIndex < 0;
+  if (el.globalRedoBtn) el.globalRedoBtn.disabled = state.actionIndex >= state.actionLog.length - 1;
 }
 
 /* ============ منطق الألوان ============ */
@@ -151,20 +263,81 @@ function computeColors() {
   if (w === null || w === undefined || Number.isNaN(w) || w <= 0) return colors;
 
   for (let i = 0; i < PLAYERS_COUNT; i++) {
-    const b = playerBalance(state.players[i]);
+    const p = state.players[i];
+    // حقل بدون اسم = غير نشط — لا يُلوَّن حتى لو كان فيه رصيد
+    if (!p.name) { colors[i] = 'gray'; continue; }
+    const b = playerBalance(p);
     if (b === null) { colors[i] = 'gray'; continue; }
+    // رصيد سالب = خلفية "السالب" الخاصة + نص أحمر ساطع
+    if (b < 0) { colors[i] = 'negative'; continue; }
     let percent = (b / w) * 100;
-    if (percent < 0) percent = 0;
     if (percent > 100) percent = 100;
     colors[i] = pickColorFromPercent(percent);
   }
   return colors;
 }
 
+/* ============ الترتيب التلقائي (الأعلى رصيداً فوق) ============ */
+function isEditingInsideList() {
+  const a = document.activeElement;
+  return a && a instanceof HTMLInputElement && a.closest && a.closest('#playersList');
+}
+
+function applyRowOrder() {
+  const entries = [];
+  for (let i = 0; i < PLAYERS_COUNT; i++) {
+    const p = state.players[i];
+    entries.push({ idx: i, named: !!p.name, b: playerBalance(p) });
+  }
+  const active = entries.filter(e => e.named).sort((a, b) => {
+    const av = a.b === null ? -Infinity : a.b;
+    const bv = b.b === null ? -Infinity : b.b;
+    if (bv !== av) return bv - av;
+    return a.idx - b.idx;
+  });
+  const order = new Array(PLAYERS_COUNT).fill(0);
+  active.forEach((e, rank) => { order[e.idx] = rank; });
+  entries.filter(e => !e.named).forEach(e => { order[e.idx] = 100 + e.idx; });
+
+  document.querySelectorAll('.player-row').forEach(row => {
+    const i = parseInt(row.dataset.idx, 10);
+    if (!Number.isNaN(i)) row.style.order = String(order[i]);
+  });
+}
+
+function applyColorsToRows() {
+  const colors = computeColors();
+  document.querySelectorAll('.player-row').forEach((row) => {
+    const i = parseInt(row.dataset.idx, 10);
+    if (!Number.isNaN(i)) row.setAttribute('data-color', colors[i]);
+  });
+  // إعادة الترتيب فقط عندما لا يكتب المستخدم داخل القائمة
+  if (!isEditingInsideList()) applyRowOrder();
+}
+
+function refreshBalanceDisplays() {
+  document.querySelectorAll('.balance-input').forEach(input => {
+    if (input === document.activeElement) return;
+    const i = parseInt(input.dataset.idx, 10);
+    if (Number.isNaN(i)) return;
+    const b = playerBalance(state.players[i]);
+    input.value = b === null ? '' : formatAmount(b);
+    input.placeholder = b === null ? 'الرصيد' : '';
+  });
+}
+
+function refreshAfterBalanceChange() {
+  refreshBalanceDisplays();
+  applyColorsToRows();
+  updateGlobalHistoryButtons();
+  updateManualWinnerBtnState();
+  checkWinner();
+}
+
 /* ============ حقل مبلغ الفوز (Inline) ============ */
 function displayWinnerAmount() {
   const input = el.winnerAmountInput;
-  if (input === document.activeElement) return; // لا تلمسه أثناء الكتابة
+  if (input === document.activeElement) return;
   input.value = state.winnerAmount === null ? '' : formatAmount(state.winnerAmount);
 }
 
@@ -185,7 +358,6 @@ function bindWinnerAmountInput() {
     if (val !== null && val > 0) {
       state.winnerAmount = val;
     }
-    // إذا تغيّر مبلغ الفوز → مرجع جديد، ألغِ كل الإقرارات
     if (state.winnerAmount !== oldAmount) {
       state.acknowledgedWinners.clear();
       state.winnerShown = false;
@@ -217,7 +389,7 @@ function renderPlayers() {
     li.setAttribute('data-color', colors[i]);
     li.setAttribute('data-idx', String(i));
 
-    // 1) حقل الاسم
+    // 1) حقل الاسم (يمين)
     const nameInput = document.createElement('input');
     nameInput.type = 'text';
     nameInput.className = 'player-input name-input';
@@ -229,7 +401,7 @@ function renderPlayers() {
     nameInput.value = p.name || '';
     bindNameInput(nameInput, i);
 
-    // 2) حقل الرصيد
+    // 2) حقل الرصيد (أقصى اليسار مع زر الخصم)
     const balanceInput = document.createElement('input');
     balanceInput.type = 'tel';
     balanceInput.className = 'player-input balance-input';
@@ -243,7 +415,7 @@ function renderPlayers() {
     balanceInput.value = balance === null ? '' : formatAmount(balance);
     bindBalanceInput(balanceInput, i);
 
-    // 3) زر الخصم (−) — يفتح حقل الرصيد في وضع الخصم
+    // 3) زر الخصم (−) — أقصى اليسار
     const subBtn = document.createElement('button');
     subBtn.type = 'button';
     subBtn.className = 'history-btn subtract-btn';
@@ -255,50 +427,14 @@ function renderPlayers() {
       balanceInput.focus();
     });
 
-    // 4) زر التراجع
-    const undoBtn = document.createElement('button');
-    undoBtn.type = 'button';
-    undoBtn.className = 'history-btn undo-btn';
-    undoBtn.textContent = '↶';
-    undoBtn.setAttribute('aria-label', 'تراجع');
-    const canUndo = p.historyIndex > 0;
-    if (!canUndo) undoBtn.disabled = true;
-    undoBtn.addEventListener('click', () => onUndoClick(i));
-
-    // 5) زر التقدم
-    const redoBtn = document.createElement('button');
-    redoBtn.type = 'button';
-    redoBtn.className = 'history-btn redo-btn';
-    redoBtn.textContent = '↷';
-    redoBtn.setAttribute('aria-label', 'تقدم');
-    const canRedo = p.historyIndex >= 0 && p.historyIndex < p.history.length - 1;
-    if (!canRedo) redoBtn.disabled = true;
-    redoBtn.addEventListener('click', () => onRedoClick(i));
-
     li.appendChild(nameInput);
     li.appendChild(balanceInput);
     li.appendChild(subBtn);
-    li.appendChild(undoBtn);
-    li.appendChild(redoBtn);
     list.appendChild(li);
   }
-}
 
-function applyColorsToRows() {
-  const colors = computeColors();
-  document.querySelectorAll('.player-row').forEach((row, i) => {
-    row.setAttribute('data-color', colors[i]);
-  });
-}
-
-function updateHistoryButtons(idx) {
-  const p = state.players[idx];
-  const row = document.querySelector(`.player-row[data-idx="${idx}"]`);
-  if (!row) return;
-  const undo = row.querySelector('.undo-btn');
-  const redo = row.querySelector('.redo-btn');
-  if (undo) undo.disabled = !(p.historyIndex > 0);
-  if (redo) redo.disabled = !(p.historyIndex >= 0 && p.historyIndex < p.history.length - 1);
+  applyRowOrder();
+  fitAllNameInputs();
 }
 
 function bindNameInput(input, idx) {
@@ -308,10 +444,16 @@ function bindNameInput(input, idx) {
       catch (_) { try { input.setSelectionRange(0, input.value.length); } catch (__) {} }
     }, 30);
   });
+  // الكبسولة تتمدد مع الكتابة حرفاً بحرف
+  input.addEventListener('input', () => fitNameInput(input));
   input.addEventListener('blur', () => {
     const v = input.value.trim();
     state.players[idx].name = v === '' ? null : v;
     saveState();
+    fitNameInput(input);
+    applyColorsToRows();
+    updateManualWinnerBtnState();
+    checkWinner();
   });
   input.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
@@ -342,7 +484,7 @@ function bindBalanceInput(input, idx) {
     let delta = parseSignedInt(raw);
     const cur = playerBalance(p);
     const isSub = input.dataset.mode === 'subtract';
-    delete input.dataset.mode;   // إعادة تعيين الوضع بعد كل إدخال
+    delete input.dataset.mode;
 
     if (delta === null || delta === 0) {
       input.value = cur === null ? '' : formatAmount(cur);
@@ -350,26 +492,20 @@ function bindBalanceInput(input, idx) {
       return;
     }
 
-    // إذا كان زر "−" مضغوطاً والمستخدم كتب رقماً موجباً → طبّق الخصم
     if (isSub && delta > 0) delta = -delta;
 
     const newBalance = (cur === null ? 0 : cur) + delta;
-    p.history = p.history.slice(0, p.historyIndex + 1);
-    p.history.push(newBalance);
-    p.historyIndex = p.history.length - 1;
+    p.balance = newBalance;
+    recordAction({ type: 'balance', idx, from: cur, to: newBalance });
 
     state.winnerShown = false;
     saveState();
 
-    // إذا كان اللاعب مقرَّاً به سابقاً ثم تجاوز مجدداً — checkWinner يعالج الحالة
-    // (لأن هذا الرصيد الجديد قد يكون أعلى، لكن لا يزال مُقَرّاً به)
-    // لا نلغي الإقرار هنا لأنه فوق العتبة أصلاً — checkWinner لا يمسحه إلا إذا نزل تحتها
-
-    // تحديث في المكان بدون إعادة رسم كامل (يحفظ التركيز إذا انتقل المستخدم لحقل آخر)
+    // تحديث في المكان بدون إعادة رسم كامل
     input.value = formatAmount(newBalance);
     input.placeholder = '';
     applyColorsToRows();
-    updateHistoryButtons(idx);
+    updateGlobalHistoryButtons();
     updateManualWinnerBtnState();
     checkWinner();
   });
@@ -382,46 +518,9 @@ function bindBalanceInput(input, idx) {
 function render() {
   displayWinnerAmount();
   renderPlayers();
+  updateGlobalHistoryButtons();
   updateManualWinnerBtnState();
   checkWinner();
-}
-
-/* ============ التراجع / التقدم ============ */
-function onUndoClick(idx) {
-  const p = state.players[idx];
-  if (p.historyIndex <= 0) return;
-  const targetBalance = p.history[p.historyIndex - 1];
-  const name = p.name || `اللاعب ${idx + 1}`;
-  showConfirm({
-    title: 'تأكيد التراجع',
-    body:  `هل تريد إرجاع رصيد "${name}" إلى ${formatAmount(targetBalance)}؟`,
-    okText: 'نعم، تراجع',
-    danger: false,
-    onOk: () => {
-      p.historyIndex -= 1;
-      state.winnerShown = false;
-      saveState();
-      render();
-    }
-  });
-}
-
-function onRedoClick(idx) {
-  const p = state.players[idx];
-  if (p.historyIndex < 0 || p.historyIndex >= p.history.length - 1) return;
-  const targetBalance = p.history[p.historyIndex + 1];
-  const name = p.name || `اللاعب ${idx + 1}`;
-  showConfirm({
-    title: 'تأكيد التقدم',
-    body:  `هل تريد تقديم رصيد "${name}" إلى ${formatAmount(targetBalance)}؟`,
-    okText: 'نعم، تقدم',
-    danger: false,
-    onOk: () => {
-      p.historyIndex += 1;
-      saveState();
-      render();
-    }
-  });
 }
 
 /* ============ رأس المال ============ */
@@ -435,10 +534,12 @@ function promptCapital() {
     onOk: (val) => {
       const parsed = parseNonNegativeInt(val);
       if (parsed === null) return;
+      const changes = [];
       for (let i = 0; i < PLAYERS_COUNT; i++) {
-        state.players[i].history = [parsed];
-        state.players[i].historyIndex = 0;
+        changes.push({ idx: i, from: state.players[i].balance, to: parsed });
+        state.players[i].balance = parsed;
       }
+      recordAction({ type: 'capital', changes });
       state.acknowledgedWinners.clear();
       state.winnerShown = false;
       saveState();
@@ -454,17 +555,16 @@ function checkWinner() {
   if (state.winnerShown) return;
 
   for (let i = 0; i < PLAYERS_COUNT; i++) {
-    const b = playerBalance(state.players[i]);
+    const p = state.players[i];
+    if (!p.name) continue;                 // حقل بدون اسم = غير نشط، لا يفوز
+    const b = playerBalance(p);
     if (b === null) continue;
     if (b >= w) {
-      // فوق العتبة: اعرض الشاشة إذا لم يُقَرَّ به بعد
       if (!state.acknowledgedWinners.has(i)) {
         showWinner(i);
         return;
       }
     } else {
-      // تحت العتبة: إذا كان مُقَرّاً به سابقاً، ألغِ الإقرار
-      // بحيث لو صعد فوق العتبة مجدداً تظهر الشاشة تلقائياً
       if (state.acknowledgedWinners.has(i)) {
         state.acknowledgedWinners.delete(i);
         saveState();
@@ -473,12 +573,13 @@ function checkWinner() {
   }
 }
 
-// إظهار يدوي: يبحث عن أي لاعب فوق العتبة (يتجاهل الإقرار) ويفتح شاشته
 function showAnyWinnerManually() {
   const w = state.winnerAmount;
   if (w === null) return false;
   for (let i = 0; i < PLAYERS_COUNT; i++) {
-    const b = playerBalance(state.players[i]);
+    const p = state.players[i];
+    if (!p.name) continue;
+    const b = playerBalance(p);
     if (b !== null && b >= w) {
       showWinner(i);
       return true;
@@ -493,7 +594,9 @@ function updateManualWinnerBtnState() {
   let candidate = false;
   if (w !== null) {
     for (let i = 0; i < PLAYERS_COUNT; i++) {
-      const b = playerBalance(state.players[i]);
+      const p = state.players[i];
+      if (!p.name) continue;
+      const b = playerBalance(p);
       if (b !== null && b >= w) { candidate = true; break; }
     }
   }
@@ -512,7 +615,6 @@ function showWinner(idx) {
 }
 
 function hideWinner() {
-  // أقرَّ الحكم برؤية هذا الفائز — لا نعيد إظهاره تلقائياً
   if (state.currentWinnerIdx !== null && state.currentWinnerIdx >= 0) {
     state.acknowledgedWinners.add(state.currentWinnerIdx);
     saveState();
@@ -601,14 +703,14 @@ function resetAll() {
   state.winnerAmount = null;
   for (let i = 0; i < PLAYERS_COUNT; i++) {
     state.players[i].name = null;
-    state.players[i].history = [];
-    state.players[i].historyIndex = -1;
+    state.players[i].balance = null;
   }
+  state.actionLog = [];
+  state.actionIndex = -1;
   state.acknowledgedWinners.clear();
   state.winnerShown = false;
   state.currentWinnerIdx = null;
   saveState();
-  // إغلاق شاشة الفوز إذا كانت مفتوحة، بدون إقرار (كل شيء مُمسَح)
   el.winnerScreen.classList.add('hidden');
   el.winnerScreen.setAttribute('aria-hidden', 'true');
   el.listScreen.classList.remove('hidden');
@@ -621,8 +723,8 @@ function bindOutsideTapDismiss() {
     const active = document.activeElement;
     if (!active || !(active instanceof HTMLInputElement)) return;
     if (e.target === active) return;
-    if (e.target instanceof HTMLInputElement) return;   // انتقال بين حقول
-    if (e.target instanceof HTMLButtonElement) return;  // زر undo/redo/reset/capital يقوم بالباقي
+    if (e.target instanceof HTMLInputElement) return;
+    if (e.target instanceof HTMLButtonElement) return;
     active.blur();
   });
 }
@@ -633,6 +735,8 @@ function bindEvents() {
   el.resetBtn.addEventListener('click', askReset);
   el.capitalBtn.addEventListener('click', promptCapital);
   el.showWinnerBtn.addEventListener('click', () => { showAnyWinnerManually(); });
+  el.globalUndoBtn.addEventListener('click', globalUndo);
+  el.globalRedoBtn.addEventListener('click', globalRedo);
 
   el.confirmCancel.addEventListener('click', closeConfirm);
   el.confirmYes.addEventListener('click', runConfirmAction);
@@ -643,7 +747,6 @@ function bindEvents() {
 
   bindOutsideTapDismiss();
 
-  // إعادة تقييم الألوان دورياً بدون تدمير التركيز
   setInterval(() => {
     applyColorsToRows();
     updateManualWinnerBtnState();

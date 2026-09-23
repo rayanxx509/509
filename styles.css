@@ -129,12 +129,37 @@ button {
   margin: 4px 0 0;
 }
 
-/* ======= حقل مبلغ الفوز ======= */
-.winner-amount {
-  position: relative;
-  margin: 0 auto;
-  width: 70%;
+/* ======= صف مبلغ الفوز: [تقدم | الحقل | تراجع] ======= */
+.winner-amount-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+}
+
+.winner-amount-row .winner-amount-input {
+  flex: 1;
   max-width: 260px;
+  margin: 0 auto;
+}
+
+.global-history-btn {
+  flex: 0 0 auto;
+  font-size: 13px;
+  font-weight: 700;
+  color: #374151;
+  background: #f3f4f6;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  padding: 10px 10px;
+  white-space: nowrap;
+  transition: transform 0.05s, background 0.1s;
+}
+.global-history-btn:active { transform: scale(0.96); background: #e5e7eb; }
+.global-history-btn:disabled {
+  opacity: 0.35;
+  pointer-events: none;
 }
 
 .winner-amount-input {
@@ -179,7 +204,9 @@ button {
 
 .player-row {
   display: flex;
-  align-items: stretch;
+  align-items: center;
+  gap: 6px;
+  padding: 0 7px;
   height: var(--field-height);
   border-radius: var(--field-radius);
   overflow: hidden;
@@ -189,14 +216,15 @@ button {
   transition: background 0.35s ease, color 0.35s ease;
 }
 
-/* حقول الاسم والرصيد كـ inputs مباشرة */
+/* حقول الاسم والرصيد كـ Pills (كبسولات داكنة شفافة فوق الخلفية المصوّرة) */
 .player-input {
-  flex: 1;
-  padding: 0 14px;
+  padding: 0 12px;
+  height: 38px;
   font-size: 17px;
   font-weight: 800;
-  color: inherit;
-  background: transparent;
+  color: #fff;
+  background: rgba(0,0,0,0.30);
+  border-radius: 9px;
   text-align: right;
   min-width: 0;
   border: none;
@@ -204,41 +232,59 @@ button {
   font-family: inherit;
   -webkit-appearance: none;
   appearance: none;
-  border-radius: 0;
-  transition: background 0.1s;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.6);
+  transition: background 0.15s, width 0.15s;
 }
 .player-input::placeholder {
   font-weight: 500;
-  font-size: 14px;
-  color: inherit;
-  opacity: 0.65;
+  font-size: 13px;
+  color: rgba(255,255,255,0.90);
+  opacity: 1;
 }
 .player-input:focus {
-  background: rgba(255,255,255,0.12);
+  background: rgba(0,0,0,0.50);
 }
 
-.name-input { text-align: right; }
+/* الاسم: كبسولة تتمدد مع طول النص (العرض يضبطه JS) — أقصى اليمين
+   margin-inline-end: auto يدفع كل ما بعده (الرصيد والناقص) لأقصى اليسار
+   ويترك المنتصف فارغاً تظهر فيه الخلفية */
+.name-input {
+  text-align: right;
+  flex: 0 1 auto;
+  width: 150px;          /* قيمة أولية — تُضبط ديناميكياً */
+  min-width: 64px;
+  max-width: 60%;
+  margin-inline-end: auto;
+}
+
+/* الرصيد وزر − أقصى اليسار */
 .balance-input {
-  text-align: left;
+  text-align: center;
   flex: 0 0 84px;
-  border-right: 1px solid rgba(0,0,0,0.15);
   font-variant-numeric: tabular-nums;
-  font-size: 18px;
-  padding: 0 10px;
+  font-size: 17px;
+  padding: 0 8px;
   direction: ltr;
 }
 .balance-input::placeholder {
   direction: rtl;
-  text-align: left;
-  font-size: 12px;
+  text-align: center;
+  font-size: 11px;
 }
 
-/* زر الخصم (−) */
+/* زر الخصم (−): كبسولة صغيرة */
 .subtract-btn {
-  flex: 0 0 32px;
+  flex: 0 0 34px;
+  height: 38px;
   font-size: 24px;
   font-weight: 900;
+  color: #fff;
+  background: rgba(0,0,0,0.30);
+  border-radius: 9px;
+  border-right: none !important;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.6);
 }
+.subtract-btn:active { background: rgba(0,0,0,0.50); }
 
 /* أزرار التراجع/التقدم */
 .history-btn {
@@ -260,36 +306,48 @@ button {
   cursor: default;
 }
 
-/* ======= تلوين الحقل بالكامل (خلفية + نص) حسب النسبة ======= */
+/* ======= تلوين الحقل: صور خلفية مخصصة (تتكيّف مع كل المقاسات) ======= */
+/* background-size: cover يجعل الصورة تغطي الحقل وتقتصّ بأناقة على أي شاشة */
+.player-row[data-color]:not([data-color="gray"]) {
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
 .player-row[data-color="gray"] {
   background: var(--c-gray);
   color: #6B7280;
 }
 
-.player-row[data-color="red"] {
-  background: var(--c-red);
-  color: #ffffff;
-}
-.player-row[data-color="orange"] {
-  background: var(--c-orange);
-  color: #1a1a1a;                            /* نص أسود على البرتقالي الفاتح */
-}
-.player-row[data-color="black"] {
-  background: var(--c-black);
-  color: #ffffff;
-}
-.player-row[data-color="yellow"] {
-  background: var(--c-yellow);
-  color: #1a1a1a;                            /* نص أسود على الأصفر */
-}
-.player-row[data-color="olive"] {
-  background: var(--c-olive);
-  color: #ffffff;
-}
+/* نص أبيض + ظل أسود قوي فوق الخلفيات الداكنة/المتوسطة */
+.player-row[data-color="red"],
+.player-row[data-color="orange"],
+.player-row[data-color="black"],
+.player-row[data-color="olive"],
 .player-row[data-color="green"] {
-  background: var(--c-green);
   color: #ffffff;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.9), 0 0 10px rgba(0,0,0,0.55);
 }
+
+/* نص داكن + توهج أبيض فوق الخلفيات الفاتحة */
+.player-row[data-color="yellow"] {
+  color: #1a1a1a;
+  text-shadow: 0 1px 2px rgba(255,255,255,0.9), 0 0 8px rgba(255,255,255,0.7);
+}
+
+/* السالب: اسم ورصيد بأحمر ساطع فوق قوس القزح */
+.player-row[data-color="negative"] {
+  color: #ff1414;
+  text-shadow: 0 1px 2px rgba(255,255,255,0.95), 0 0 8px rgba(255,255,255,0.8);
+}
+
+.player-row[data-color="red"]      { background-color: var(--c-red);    background-image: url('bg-red.jpg'); }
+.player-row[data-color="orange"]   { background-color: var(--c-orange); background-image: url('bg-orange.jpg'); }
+.player-row[data-color="black"]    { background-color: var(--c-black);  background-image: url('bg-black.jpg'); }
+.player-row[data-color="yellow"]   { background-color: var(--c-yellow); background-image: url('bg-yellow.jpg'); }
+.player-row[data-color="olive"]    { background-color: var(--c-olive);  background-image: url('bg-olive.jpg'); }
+.player-row[data-color="green"]    { background-color: var(--c-green);  background-image: url('bg-green.jpg'); }
+.player-row[data-color="negative"] { background-color: #fde7f0;         background-image: url('bg-negative.jpg'); }
 
 /* الخط الفاصل بين الاسم والرصيد يتكيّف مع لون الخلفية */
 .player-row[data-color="red"]   .balance-btn,
@@ -302,56 +360,19 @@ button {
 .player-row[data-color="yellow"] .balance-btn {
   border-right-color: rgba(0,0,0,0.20);
 }
-/* الفاصل بين الاسم والرصيد (input جديد) */
-.player-row[data-color="red"]   .balance-input,
-.player-row[data-color="black"] .balance-input,
-.player-row[data-color="olive"] .balance-input,
-.player-row[data-color="green"] .balance-input {
-  border-right-color: rgba(255,255,255,0.30);
-}
-.player-row[data-color="orange"] .balance-input,
-.player-row[data-color="yellow"] .balance-input {
-  border-right-color: rgba(0,0,0,0.20);
-}
-.player-row[data-color="gray"] .balance-input {
-  border-right-color: rgba(0,0,0,0.10);
-}
-
-/* placeholder text يبقى مرئياً في كل الحالات */
-.player-row[data-color="gray"] .player-input::placeholder { color: #9CA3AF; opacity: 1; }
-.player-row[data-color="red"]   .player-input::placeholder,
-.player-row[data-color="black"] .player-input::placeholder,
-.player-row[data-color="olive"] .player-input::placeholder,
-.player-row[data-color="green"] .player-input::placeholder { color: rgba(255,255,255,0.85); opacity: 1; }
-.player-row[data-color="orange"] .player-input::placeholder,
-.player-row[data-color="yellow"] .player-input::placeholder { color: rgba(0,0,0,0.60); opacity: 1; }
-
-/* الخط الفاصل بين أزرار التراجع/التقدم يتكيّف مع لون الخلفية */
-.player-row[data-color="red"]   .history-btn,
-.player-row[data-color="black"] .history-btn,
-.player-row[data-color="olive"] .history-btn,
-.player-row[data-color="green"] .history-btn {
-  border-right-color: rgba(255,255,255,0.30);
-}
-.player-row[data-color="orange"] .history-btn,
-.player-row[data-color="yellow"] .history-btn {
-  border-right-color: rgba(0,0,0,0.20);
-}
-.player-row[data-color="gray"] .history-btn {
-  border-right-color: rgba(0,0,0,0.10);
-}
-
-/* تأثير التركيز على input يتكيّف مع لون الخلفية */
-.player-row[data-color="red"]   .player-input:focus,
-.player-row[data-color="black"] .player-input:focus,
-.player-row[data-color="olive"] .player-input:focus,
-.player-row[data-color="green"] .player-input:focus {
-  background: rgba(255,255,255,0.15);
-}
-.player-row[data-color="orange"] .player-input:focus,
-.player-row[data-color="yellow"] .player-input:focus,
-.player-row[data-color="gray"]   .player-input:focus {
+/* الحقول الفارغة (رمادية): كبسولات فاتحة هادئة بدل الداكنة */
+.player-row[data-color="gray"] .player-input,
+.player-row[data-color="gray"] .subtract-btn {
   background: rgba(0,0,0,0.06);
+  color: #6B7280;
+}
+.player-row[data-color="gray"] .player-input::placeholder { color: #9CA3AF; }
+.player-row[data-color="gray"] .player-input:focus { background: rgba(0,0,0,0.12); }
+
+/* السالب: النص أحمر ساطع داخل الكبسولة */
+.player-row[data-color="negative"] .name-input,
+.player-row[data-color="negative"] .balance-input {
+  color: #ff2b2b;
 }
 
 /* ======= التذييل ======= */
