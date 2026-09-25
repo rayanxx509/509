@@ -9,7 +9,7 @@
   <meta name="theme-color" content="#ffffff" />
   <link rel="manifest" href="manifest.json" />
   <link rel="apple-touch-icon" href="icon-192.png" />
-  <link rel="stylesheet" href="styles.css?v=12" />
+  <link rel="stylesheet" href="styles.css?v=13" />
   <title>المداقش — نشرة الحكم</title>
 </head>
 <body>
@@ -47,11 +47,6 @@
 
       <ul id="playersList" class="players-list" aria-label="قائمة اللاعبين"></ul>
 
-      <div id="onlineCounter" class="online-counter hidden" aria-live="polite">
-        <span class="online-dot"></span>
-        <span id="onlineCountText">المتصلون الآن: —</span>
-      </div>
-
       <footer class="footer">برمجة - أبو ريان 509 | قروب المجَّرشين</footer>
     </div>
   </main>
@@ -70,6 +65,63 @@
     </div>
   </section>
 
+  <!-- صفحة معلومات المطور -->
+  <section id="devScreen" class="screen hidden" aria-hidden="true">
+    <div class="page-card">
+      <h2 class="page-title">نبذه عن البرنامج :</h2>
+      <p class="page-text">
+        تم تخصيص هذا البرنامج لِلُعبة المداقش عن طريق أوراق البلوت على أرض الواقع،
+        ويمكنك ان تستخدمها في ألعاب اخرى متنوعه حسب تناسبها وتكيفها مع تحدياتك
+        وألعابك المختلفه
+      </p>
+      <p class="page-text page-credit">برمجة وتطوير أبو ريان 509 | قروب المجرَّشين 2026</p>
+      <p class="page-text">إيميل : <span class="page-email">rayanswahel@gmail.com</span></p>
+      <button id="devBackBtn" class="back-btn" type="button">
+        &lt; رجوع للقائمة
+      </button>
+    </div>
+  </section>
+
+  <!-- صفحة سجل الجولات -->
+  <section id="roundsScreen" class="screen hidden" aria-hidden="true">
+    <div class="page-card">
+      <h2 class="page-title">سجل جولات اللاعبين :</h2>
+      <p class="page-text">
+        هذا سجل عدد جولات اللاعبين والمبالغ التي دخلوا بها في كل جوله
+        من بداية رأس المال الذي تم وضعه مُسبقاً.
+      </p>
+      <p class="page-note-title">ملاحظة للحَكَم :</p>
+      <p class="page-text page-note">
+        اذا كنت انت الحكم وأدخلت للاعب رصيد غير دقيق عن طريق الخطأ ؟
+        قم بالضغط على التراجع فوراً لكي لايتم احتسابها جولة، ولاتقم بإنقاصه
+        يدوياً وحسابياً، ثم بعد التراجع ادخل الرصيد للاعب وسوف يتم احتسابها
+        جولة صحيحه، او قم بالضغط على زر التقدم لكي يتم احتسابها على نفس
+        حالتها الصحيحه ولن يتم تسجيلها على انها جوله جديده.
+      </p>
+      <div id="roundsTable" class="rounds-table"></div>
+      <button id="roundsBackBtn" class="back-btn" type="button">
+        &lt; رجوع للقائمة
+      </button>
+    </div>
+  </section>
+
+  <!-- الشريط السفلي الثابت -->
+  <nav id="bottomBar" class="bottom-bar" aria-label="شريط الأدوات">
+    <button id="devInfoBtn" class="bar-item" type="button">
+      <span class="bar-icon">ℹ️</span>
+      <span class="bar-label">معلومات المطور</span>
+    </button>
+    <button id="roundsBtn" class="bar-item" type="button">
+      <span class="bar-icon">📋</span>
+      <span class="bar-label">الجولات</span>
+    </button>
+    <div id="onlineCounter" class="bar-item bar-online hidden" aria-live="polite">
+      <span class="online-dot"></span>
+      <span id="onlineCountText">المتصلون الآن: —</span>
+    </div>
+    <div class="bar-spacer"></div>
+  </nav>
+
   <!-- مربع تأكيد المسح -->
   <div id="confirmOverlay" class="overlay hidden" aria-hidden="true">
     <div class="confirm-box" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
@@ -82,6 +134,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=12"></script>
+  <script src="app.js?v=13"></script>
 </body>
 </html>

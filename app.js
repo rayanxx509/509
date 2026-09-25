@@ -11,7 +11,7 @@
    - شاشة فوز بنظام الإقرار + زر "الفائز" اليدوي
    ==================================================================== */
 
-const APP_VERSION    = 12;             // يجب أن يطابق version.json و ?v= في index.html
+const APP_VERSION    = 13;             // يجب أن يطابق version.json و ?v= في index.html
 const PLAYERS_COUNT  = 10;
 const STORAGE_KEY    = 'madagish.v1';
 const REFRESH_MS     = 3000;
@@ -40,8 +40,11 @@ function newPlayer() {
 const state = {
   winnerAmount: null,
   players: Array.from({ length: PLAYERS_COUNT }, newPlayer),
-  actionLog: [],                   // سجل تعديلات الرصيد: {type:'balance',idx,from,to} أو {type:'capital',changes:[...]}
+  actionLog: [],                   // سجل تعديلات الرصيد: {type:'balance',idx,from,to,logRef?} أو {type:'capital',changes:[...]}
   actionIndex: -1,                 // مؤشر آخر تعديل مُطبَّق
+  capitalSet: false,               // هل أُدخل رأس المال؟ (يتحكم بظهور حقول الرصيد)
+  roundsLog: [],                   // دفتر الجولات التوثيقي: {id, idx, name, amount, mark:null|'undo'|'redo'}
+  roundsSeq: 0,                    // عدّاد معرفات أسطر الدفتر
   winnerShown: false,
   currentWinnerIdx: null,
   acknowledgedWinners: new Set()
@@ -51,6 +54,13 @@ const state = {
 const el = {
   listScreen:          document.getElementById('listScreen'),
   winnerScreen:        document.getElementById('winnerScreen'),
+  devScreen:           document.getElementById('devScreen'),
+  roundsScreen:        document.getElementById('roundsScreen'),
+  roundsTable:         document.getElementById('roundsTable'),
+  devInfoBtn:          document.getElementById('devInfoBtn'),
+  roundsBtn:           document.getElementById('roundsBtn'),
+  devBackBtn:          document.getElementById('devBackBtn'),
+  roundsBackBtn:       document.getElementById('roundsBackBtn'),
   winnerAmountInput:   document.getElementById('winnerAmountInput'),
   playersList:         document.getElementById('playersList'),
   resetBtn:            document.getElementById('resetBtn'),
@@ -140,6 +150,9 @@ function saveState() {
       players: state.players,
       actionLog: state.actionLog,
       actionIndex: state.actionIndex,
+      capitalSet: state.capitalSet,
+      roundsLog: state.roundsLog,
+      roundsSeq: state.roundsSeq,
       acknowledgedWinners: Array.from(state.acknowledgedWinners)
     }));
   } catch (_) { /* تجاهل */ }
@@ -161,6 +174,13 @@ function loadState() {
       state.actionLog = data.actionLog.filter(a => a && typeof a === 'object');
       state.actionIndex = Math.min(Math.max(-1, data.actionIndex), state.actionLog.length - 1);
     }
+    if (Array.isArray(data.roundsLog)) {
+      state.roundsLog = data.roundsLog.filter(l => l && typeof l === 'object' && typeof l.amount === 'number');
+    }
+    if (typeof data.roundsSeq === 'number') state.roundsSeq = data.roundsSeq;
+    if (typeof data.capitalSet === 'boolean') {
+      state.capitalSet = data.capitalSet;
+    }
     if (Array.isArray(data.players)) {
       for (let i = 0; i < PLAYERS_COUNT; i++) {
         const p = data.players[i];
@@ -180,7 +200,46 @@ function loadState() {
         }
       }
     }
+    // ترحيل: نسخة قديمة بدون capitalSet — من عنده أرصدة محفوظة نعتبر رأس المال مُدخلاً
+    // (حتى لا تختفي حقول الرصيد عن اللاعبين في منتصف اللعب)
+    if (typeof data.capitalSet !== 'boolean') {
+      state.capitalSet = state.players.some(p => p.balance !== null);
+    }
   } catch (_) { /* تجاهل */ }
+}
+
+/* ============ دفتر جولات اللاعبين (توثيقي — لا يُحذف منه شيء) ============ */
+const ROUNDS_LOG_MAX = 800;
+
+function playerHasColumn(idx) {
+  return state.roundsLog.some(l => l.idx === idx);
+}
+
+function lastLoggedName(idx) {
+  for (let i = state.roundsLog.length - 1; i >= 0; i--) {
+    if (state.roundsLog[i].idx === idx) return state.roundsLog[i].name;
+  }
+  return null;
+}
+
+/* يسجل سطر جولة جديداً ويعيد معرّفه — أو null إذا الحقل "فضولي" (لم يُسجل فيه اسم قط) */
+function addRoundLine(idx, amount) {
+  const currentName = state.players[idx].name;
+  if (!currentName && !playerHasColumn(idx)) return null;   // حركة استكشافية — لا تُسجل
+  const name = currentName || lastLoggedName(idx) || `اللاعب ${idx + 1}`;
+  state.roundsSeq += 1;
+  const line = { id: state.roundsSeq, idx, name, amount, mark: null };
+  state.roundsLog.push(line);
+  if (state.roundsLog.length > ROUNDS_LOG_MAX) {
+    state.roundsLog = state.roundsLog.slice(state.roundsLog.length - ROUNDS_LOG_MAX);
+  }
+  return line.id;
+}
+
+function setRoundMark(lineId, mark) {
+  if (!lineId) return;
+  const line = state.roundsLog.find(l => l.id === lineId);
+  if (line) line.mark = mark;
 }
 
 /* ============ سجل التعديلات العام (تراجع/تقدم) ============ */
@@ -226,9 +285,12 @@ function globalUndo() {
     onOk: () => {
       applyActionValues(action, true);
       state.actionIndex -= 1;
+      // دفتر الجولات: علّم سطر الجولة المُلغاة بـ "تراجع" (لا يُحسب جولة)
+      if (action.type === 'balance') setRoundMark(action.logRef, 'undo');
       state.winnerShown = false;
       saveState();
       refreshAfterBalanceChange();
+      renderRoundsIfOpen();
     }
   });
 }
@@ -244,9 +306,12 @@ function globalRedo() {
     onOk: () => {
       applyActionValues(action, false);
       state.actionIndex += 1;
+      // دفتر الجولات: العلامة تتقلب على نفس السطر إلى "تقدم" (يُحسب جولة صحيحة)
+      if (action.type === 'balance') setRoundMark(action.logRef, 'redo');
       state.winnerShown = false;
       saveState();
       refreshAfterBalanceChange();
+      renderRoundsIfOpen();
     }
   });
 }
@@ -435,8 +500,11 @@ function renderPlayers() {
     });
 
     li.appendChild(nameInput);
-    li.appendChild(balanceInput);
-    li.appendChild(subBtn);
+    // حقول الرصيد وزر − تظهر فقط بعد إدخال رأس المال
+    if (state.capitalSet) {
+      li.appendChild(balanceInput);
+      li.appendChild(subBtn);
+    }
     list.appendChild(li);
   }
 
@@ -508,7 +576,9 @@ function bindBalanceInput(input, idx) {
       newBalance = (cur === null ? 0 : cur) + delta;
     }
     p.balance = newBalance;
-    recordAction({ type: 'balance', idx, from: cur, to: newBalance });
+    const action = { type: 'balance', idx, from: cur, to: newBalance };
+    recordAction(action);
+    action.logRef = addRoundLine(idx, newBalance);   // سطر في دفتر الجولات (أو null لحقل بلا اسم قط)
 
     state.winnerShown = false;
     saveState();
@@ -552,6 +622,8 @@ function promptCapital() {
         state.players[i].balance = parsed;
       }
       recordAction({ type: 'capital', changes });
+      // رأس المال لا يُسجَّل في دفتر الجولات ولا يُحسب جولة
+      state.capitalSet = true;
       state.acknowledgedWinners.clear();
       state.winnerShown = false;
       saveState();
@@ -619,11 +691,112 @@ function showWinner(idx) {
   const p = state.players[idx];
   el.winnerName.textContent = p.name || 'لاعب بدون اسم';
   el.winnerAmountDisplay.textContent = formatAmount(playerBalance(p));
+  closeSubScreens();
   el.listScreen.classList.add('hidden');
   el.winnerScreen.classList.remove('hidden');
   el.winnerScreen.setAttribute('aria-hidden', 'false');
   state.winnerShown = true;
   state.currentWinnerIdx = idx;
+}
+
+/* ============ الصفحات الفرعية (معلومات المطور / سجل الجولات) ============ */
+function closeSubScreens() {
+  el.devScreen.classList.add('hidden');
+  el.devScreen.setAttribute('aria-hidden', 'true');
+  el.roundsScreen.classList.add('hidden');
+  el.roundsScreen.setAttribute('aria-hidden', 'true');
+}
+
+function openDevScreen() {
+  if (state.winnerShown) return;   // شاشة الفوز لها الأولوية
+  closeSubScreens();
+  el.listScreen.classList.add('hidden');
+  el.devScreen.classList.remove('hidden');
+  el.devScreen.setAttribute('aria-hidden', 'false');
+}
+
+function openRoundsScreen() {
+  if (state.winnerShown) return;
+  closeSubScreens();
+  renderRoundsTable();
+  el.listScreen.classList.add('hidden');
+  el.roundsScreen.classList.remove('hidden');
+  el.roundsScreen.setAttribute('aria-hidden', 'false');
+}
+
+function backToList() {
+  closeSubScreens();
+  el.listScreen.classList.remove('hidden');
+}
+
+function renderRoundsIfOpen() {
+  if (!el.roundsScreen.classList.contains('hidden')) renderRoundsTable();
+}
+
+function renderRoundsTable() {
+  const table = el.roundsTable;
+  table.innerHTML = '';
+
+  // جمع الأعمدة: لاعب لديه أسطر مسجلة = عمود
+  const columns = [];
+  for (let i = 0; i < PLAYERS_COUNT; i++) {
+    const lines = state.roundsLog.filter(l => l.idx === i);
+    if (lines.length === 0) continue;
+    const currentName = state.players[i].name;
+    const displayName = currentName || lines[lines.length - 1].name;
+    const count = lines.filter(l => l.mark !== 'undo').length;
+    columns.push({ idx: i, displayName, count, lines, exited: !currentName });
+  }
+
+  if (columns.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'rounds-empty';
+    empty.textContent = 'لا توجد جولات مسجلة بعد.';
+    table.appendChild(empty);
+    return;
+  }
+
+  for (const col of columns) {
+    const colEl = document.createElement('div');
+    colEl.className = 'round-col';
+
+    const header = document.createElement('div');
+    header.className = 'round-col-header';
+    header.textContent = `${col.displayName} + ${col.count} جولات`;
+    colEl.appendChild(header);
+
+    for (const line of col.lines) {
+      const lineEl = document.createElement('div');
+      lineEl.className = 'round-line';
+
+      const amountEl = document.createElement('span');
+      amountEl.className = 'round-amount';
+      amountEl.textContent = formatAmount(line.amount);
+      lineEl.appendChild(amountEl);
+
+      if (line.mark === 'undo') {
+        const m = document.createElement('span');
+        m.className = 'round-mark';
+        m.textContent = 'تراجع';
+        lineEl.appendChild(m);
+      } else if (line.mark === 'redo') {
+        const m = document.createElement('span');
+        m.className = 'round-mark';
+        m.textContent = 'تقدم';
+        lineEl.appendChild(m);
+      }
+      colEl.appendChild(lineEl);
+    }
+
+    if (col.exited) {
+      const exitEl = document.createElement('div');
+      exitEl.className = 'round-exit';
+      exitEl.textContent = 'خسر وخرج !';
+      colEl.appendChild(exitEl);
+    }
+
+    table.appendChild(colEl);
+  }
 }
 
 function hideWinner() {
@@ -719,10 +892,14 @@ function resetAll() {
   }
   state.actionLog = [];
   state.actionIndex = -1;
+  state.capitalSet = false;        // تختفي حقول الرصيد حتى يُدخل رأس مال جديد
+  state.roundsLog = [];
+  state.roundsSeq = 0;
   state.acknowledgedWinners.clear();
   state.winnerShown = false;
   state.currentWinnerIdx = null;
   saveState();
+  closeSubScreens();
   el.winnerScreen.classList.add('hidden');
   el.winnerScreen.setAttribute('aria-hidden', 'true');
   el.listScreen.classList.remove('hidden');
@@ -756,6 +933,12 @@ function bindEvents() {
     if (e.target === el.confirmOverlay) closeConfirm();
   });
   el.backBtn.addEventListener('click', hideWinner);
+
+  // الشريط السفلي والصفحات الفرعية
+  el.devInfoBtn.addEventListener('click', openDevScreen);
+  el.roundsBtn.addEventListener('click', openRoundsScreen);
+  el.devBackBtn.addEventListener('click', backToList);
+  el.roundsBackBtn.addEventListener('click', backToList);
 
   bindOutsideTapDismiss();
 

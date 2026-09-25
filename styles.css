@@ -376,17 +376,52 @@ button {
   color: #ff2b2b;
 }
 
-/* ======= عدّاد المتصلين الآن ======= */
-.online-counter {
+/* ======= الشريط السفلي الثابت (أسلوب واتساب) ======= */
+.bottom-bar {
+  position: fixed;
+  bottom: 0;
+  right: 0;
+  left: 0;
+  z-index: 60;
   display: flex;
   align-items: center;
+  gap: 2px;
+  background: #ffffff;
+  border-top: 1px solid #e5e7eb;
+  padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
+  box-shadow: 0 -2px 10px rgba(0,0,0,0.05);
+}
+
+.bar-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   justify-content: center;
-  gap: 8px;
-  margin: 6px auto 0;
-  font-size: 14px;
+  gap: 2px;
+  padding: 4px 10px;
+  font-size: 10.5px;
   font-weight: 700;
   color: #374151;
+  background: transparent;
+  border-radius: 10px;
+  transition: background 0.1s;
 }
+button.bar-item:active { background: #f3f4f6; }
+
+.bar-icon { font-size: 20px; line-height: 1; }
+.bar-label { white-space: nowrap; }
+
+.bar-online {
+  flex-direction: row;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 800;
+  color: #374151;
+  cursor: default;
+}
+
+.bar-spacer { flex: 1; }
+
 .online-dot {
   width: 9px;
   height: 9px;
@@ -397,6 +432,125 @@ button {
 }
 @keyframes onlinePulse {
   50% { opacity: 0.45; }
+}
+
+/* مساحة سفلية حتى لا يغطي الشريط المحتوى */
+.screen { padding-bottom: 92px; }
+
+/* ======= صفحات فرعية (معلومات المطور / سجل الجولات) ======= */
+#devScreen, #roundsScreen {
+  align-items: flex-start;
+  justify-content: center;
+}
+
+.page-card {
+  width: 100%;
+  max-width: 480px;
+  margin: 0 auto;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 8px 4px;
+}
+
+.page-title {
+  font-size: 22px;
+  font-weight: 800;
+  margin: 4px 0 2px;
+  text-align: right;
+}
+
+.page-text {
+  font-size: 15px;
+  line-height: 1.8;
+  color: #1f2937;
+  margin: 0;
+  text-align: right;
+}
+
+.page-credit { font-weight: 800; }
+.page-email { direction: ltr; unicode-bidi: embed; font-weight: 700; }
+
+.page-note-title {
+  font-size: 16px;
+  font-weight: 800;
+  margin: 6px 0 0;
+  color: #b45309;
+}
+.page-note {
+  background: #FFFBEB;
+  border: 1px solid #FDE68A;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 13.5px;
+}
+
+.page-card .back-btn {
+  align-self: center;
+  margin-top: 10px;
+}
+
+/* ======= جدول سجل الجولات ======= */
+.rounds-table {
+  display: flex;
+  flex-direction: row;
+  gap: 10px;
+  overflow-x: auto;
+  padding: 6px 2px 10px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.rounds-empty {
+  text-align: center;
+  color: #9ca3af;
+  font-size: 14px;
+  padding: 18px 0;
+  width: 100%;
+}
+
+.round-col {
+  flex: 0 0 auto;
+  min-width: 118px;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 8px 10px;
+  background: #fafafa;
+}
+
+.round-col-header {
+  font-size: 13.5px;
+  font-weight: 800;
+  text-align: center;
+  border-bottom: 1px solid #e5e7eb;
+  padding-bottom: 6px;
+  margin-bottom: 6px;
+  white-space: nowrap;
+}
+
+.round-line {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  padding: 2px 0;
+}
+.round-line .round-amount { direction: ltr; unicode-bidi: embed; }
+.round-line .round-mark {
+  font-size: 11px;
+  font-weight: 600;
+  color: #6b7280;
+}
+
+.round-exit {
+  margin-top: 6px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 800;
+  color: #ff1414;
 }
 
 /* ======= التذييل ======= */
