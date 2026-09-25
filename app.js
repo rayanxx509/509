@@ -11,12 +11,17 @@
    - شاشة فوز بنظام الإقرار + زر "الفائز" اليدوي
    ==================================================================== */
 
-const APP_VERSION    = 9;              // يجب أن يطابق version.json و ?v= في index.html
+const APP_VERSION    = 11;             // يجب أن يطابق version.json و ?v= في index.html
 const PLAYERS_COUNT  = 10;
 const STORAGE_KEY    = 'madagish.v1';
 const REFRESH_MS     = 3000;
 const ACTION_LOG_MAX = 200;
 const UPDATE_CHECK_MS = 60000;         // فحص التحديثات كل دقيقة
+
+/* عدّاد المتصلين — رابط قاعدة Firebase Realtime Database (BLUEPRINT §12) */
+const PRESENCE_DB_URL   = 'https://madagish509-default-rtdb.firebaseio.com';
+const PRESENCE_BEAT_MS  = 10000;       // نبضة "أنا متصل" + قراءة العدد كل 10 ثوان
+const PRESENCE_FRESH_MS = 25000;       // يُعد متصلاً من نبض خلال آخر 25 ثانية
 
 const COLOR_THRESHOLDS = [
   { min: 70, color: 'green'  },
@@ -793,12 +798,85 @@ function startUpdateChecker() {
   });
 }
 
+/* ============ عدّاد المتصلين الآن (Firebase REST — بدون مكتبات) ============ */
+function startPresence() {
+  if (!PRESENCE_DB_URL) return;   // الميزة معطلة حتى يُضبط الرابط
+  const counterEl = document.getElementById('onlineCounter');
+  const textEl    = document.getElementById('onlineCountText');
+  if (!counterEl || !textEl) return;
+  counterEl.classList.remove('hidden');
+
+  // معرّف فريد لهذا التبويب
+  let myId = null;
+  try {
+    myId = sessionStorage.getItem('madagish.presenceId');
+    if (!myId) {
+      myId = 'p' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+      sessionStorage.setItem('madagish.presenceId', myId);
+    }
+  } catch (_) {
+    myId = 'p' + Math.random().toString(36).slice(2, 10);
+  }
+
+  const base   = PRESENCE_DB_URL.replace(/\/+$/, '');
+  const myUrl  = `${base}/presence/${myId}.json`;
+  const allUrl = `${base}/presence.json`;
+
+  async function beatAndCount() {
+    try {
+      // 1) نبضة: سجّل نفسي بختم وقت السيرفر (لا نعتمد على ساعة الجهاز)
+      await fetch(myUrl, {
+        method: 'PUT',
+        body: JSON.stringify({ ts: { '.sv': 'timestamp' } })
+      });
+      // 2) اقرأ الجميع واحسب من نبض حديثاً
+      const res = await fetch(allUrl, { cache: 'no-store' });
+      if (!res.ok) return;
+      const data = await res.json();
+      if (!data || typeof data !== 'object') {
+        textEl.textContent = 'المتصلون الآن: 1';
+        return;
+      }
+      let maxTs = 0;
+      const entries = [];
+      for (const k of Object.keys(data)) {
+        const ts = (data[k] && typeof data[k].ts === 'number') ? data[k].ts : 0;
+        entries.push({ k, ts });
+        if (ts > maxTs) maxTs = ts;
+      }
+      // المقارنة نسبية لأحدث نبضة (ختم سيرفر) — مستقلة عن ساعات الأجهزة
+      let count = 0;
+      const stale = [];
+      for (const e of entries) {
+        if (maxTs - e.ts < PRESENCE_FRESH_MS) count++;
+        else if (maxTs - e.ts > 120000) stale.push(e.k);
+      }
+      textEl.textContent = 'المتصلون الآن: ' + Math.max(1, count);
+      // تنظيف عرضي للسجلات الميتة (من أغلق دون تسجيل خروج)
+      if (stale.length && Math.random() < 0.25) {
+        for (const k of stale.slice(0, 10)) {
+          fetch(`${base}/presence/${k}.json`, { method: 'DELETE' }).catch(() => {});
+        }
+      }
+    } catch (_) { /* أوفلاين — اترك آخر قيمة معروضة */ }
+  }
+
+  beatAndCount();
+  setInterval(beatAndCount, PRESENCE_BEAT_MS);
+
+  // عند إغلاق الصفحة: احذف سجلي (أفضل جهد)
+  window.addEventListener('pagehide', () => {
+    try { fetch(myUrl, { method: 'DELETE', keepalive: true }); } catch (_) {}
+  });
+}
+
 /* ============ الإقلاع ============ */
 function init() {
   loadState();
   bindEvents();
   render();
   startUpdateChecker();
+  startPresence();
 }
 
 if (document.readyState === 'loading') {

@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="UTF-8" />
@@ -9,7 +9,7 @@
   <meta name="theme-color" content="#ffffff" />
   <link rel="manifest" href="manifest.json" />
   <link rel="apple-touch-icon" href="icon-192.png" />
-  <link rel="stylesheet" href="styles.css?v=9" />
+  <link rel="stylesheet" href="styles.css?v=11" />
   <title>المداقش — نشرة الحكم</title>
 </head>
 <body>
@@ -47,6 +47,11 @@
 
       <ul id="playersList" class="players-list" aria-label="قائمة اللاعبين"></ul>
 
+      <div id="onlineCounter" class="online-counter hidden" aria-live="polite">
+        <span class="online-dot"></span>
+        <span id="onlineCountText">المتصلون الآن: —</span>
+      </div>
+
       <footer class="footer">برمجة - أبو ريان 509 | قروب المجَّرشين</footer>
     </div>
   </main>
@@ -77,6 +82,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=9"></script>
+  <script src="app.js?v=11"></script>
 </body>
 </html>
