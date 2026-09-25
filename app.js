@@ -11,7 +11,7 @@
    - شاشة فوز بنظام الإقرار + زر "الفائز" اليدوي
    ==================================================================== */
 
-const APP_VERSION    = 11;             // يجب أن يطابق version.json و ?v= في index.html
+const APP_VERSION    = 12;             // يجب أن يطابق version.json و ?v= في index.html
 const PLAYERS_COUNT  = 10;
 const STORAGE_KEY    = 'madagish.v1';
 const REFRESH_MS     = 3000;
@@ -493,15 +493,20 @@ function bindBalanceInput(input, idx) {
     const isSub = input.dataset.mode === 'subtract';
     delete input.dataset.mode;
 
-    if (delta === null || delta === 0) {
+    if (delta === null) {
       input.value = cur === null ? '' : formatAmount(cur);
       input.placeholder = cur === null ? 'الرصيد' : '';
       return;
     }
 
-    if (isSub && delta > 0) delta = -delta;
-
-    const newBalance = (cur === null ? 0 : cur) + delta;
+    let newBalance;
+    if (delta === 0) {
+      // قانون اللعبة: لا وجود للصفر — إدخال 0 يعني أن اللاعب صار سالب 1
+      newBalance = -1;
+    } else {
+      if (isSub && delta > 0) delta = -delta;
+      newBalance = (cur === null ? 0 : cur) + delta;
+    }
     p.balance = newBalance;
     recordAction({ type: 'balance', idx, from: cur, to: newBalance });
 

@@ -360,13 +360,14 @@ button {
 .player-row[data-color="yellow"] .balance-btn {
   border-right-color: rgba(0,0,0,0.20);
 }
-/* الحقول الفارغة (رمادية): كبسولات فاتحة هادئة بدل الداكنة */
+/* الحقول الفارغة (رمادية): كبسولات فاتحة هادئة، نص أسود عادي بدون ظل */
 .player-row[data-color="gray"] .player-input,
 .player-row[data-color="gray"] .subtract-btn {
   background: rgba(0,0,0,0.06);
-  color: #6B7280;
+  color: #1a1a1a;
+  text-shadow: none;
 }
-.player-row[data-color="gray"] .player-input::placeholder { color: #9CA3AF; }
+.player-row[data-color="gray"] .player-input::placeholder { color: #1a1a1a; }
 .player-row[data-color="gray"] .player-input:focus { background: rgba(0,0,0,0.12); }
 
 /* السالب: النص أحمر ساطع داخل الكبسولة */
