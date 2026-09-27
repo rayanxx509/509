@@ -418,6 +418,29 @@ button {
 .bar-icon svg { display: block; }
 button.bar-item:active { background: #f3f4f6; }
 
+/* المؤشر المنزلق: كبسولة مظلَّلة 20% تسبح خلف الأزرار وتنتقل بانسيابية */
+.bar-indicator {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  background: rgba(0, 0, 0, 0.20);
+  border-radius: 999px;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0;
+  transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+              width 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+              height 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+              opacity 0.2s ease;
+  will-change: transform, width;
+}
+.bar-indicator.on { opacity: 1; }
+
+/* الأزرار فوق المؤشر */
+.bar-item { position: relative; z-index: 1; }
+
 .bar-icon { font-size: 20px; line-height: 1; }
 .bar-label { white-space: nowrap; }
 

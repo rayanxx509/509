@@ -11,7 +11,7 @@
    - شاشة فوز بنظام الإقرار + زر "الفائز" اليدوي
    ==================================================================== */
 
-const APP_VERSION    = 34;             // يجب أن يطابق version.json و ?v= في index.html
+const APP_VERSION    = 36;             // يجب أن يطابق version.json و ?v= في index.html
 const PLAYERS_COUNT  = 10;
 const STORAGE_KEY    = 'madagish.v1';
 const REFRESH_MS     = 3000;
@@ -824,6 +824,7 @@ function openDevScreen() {
   refreshStatsDisplay();
   fetchMonthlyVisits();
   fetchYearlyUsers();
+  updateBarActive();
 }
 
 function openRoundsScreen() {
@@ -833,12 +834,52 @@ function openRoundsScreen() {
   el.listScreen.classList.add('hidden');
   el.roundsScreen.classList.remove('hidden');
   el.roundsScreen.setAttribute('aria-hidden', 'false');
+  updateBarActive();
 }
 
 function backToList() {
   closeSubScreens();
   el.listScreen.classList.remove('hidden');
   if (typeof ensureChatAlive === 'function') ensureChatAlive();
+  updateBarActive();
+}
+
+/* المؤشر المنزلق: ينساب خلف زر القائمة النشطة بحركة 0.35 ثانية */
+function updateBarActive() {
+  const indicator = document.getElementById('barIndicator');
+  if (!indicator) return;
+  const ps = document.getElementById('profileScreen');
+  const os = document.getElementById('ownerScreen');
+  const states = [
+    ['homeBtn',    !el.listScreen.classList.contains('hidden')],
+    ['devInfoBtn', !el.devScreen.classList.contains('hidden')],
+    ['roundsBtn',  !el.roundsScreen.classList.contains('hidden')],
+    ['ownerBtn',   os ? !os.classList.contains('hidden') : false],
+    ['meBtn',      (ps ? !ps.classList.contains('hidden') : false) && profileViewUid === chatUid()]
+  ];
+  let target = null;
+  for (const [id, on] of states) {
+    if (on) { target = document.getElementById(id); break; }
+  }
+  if (!target || target.classList.contains('hidden')) {
+    indicator.classList.remove('on');
+    return;
+  }
+  const x = target.offsetLeft;
+  const y = target.offsetTop;
+  const w = target.offsetWidth;
+  const h = target.offsetHeight;
+  // أول ظهور: قفزة فورية بلا حركة (حتى لا ينزلق من حافة الشاشة)
+  const firstShow = !indicator.classList.contains('on');
+  if (firstShow) indicator.style.transition = 'none';
+  indicator.style.width = w + 'px';
+  indicator.style.height = h + 'px';
+  indicator.style.transform = `translate(${x}px, ${y}px)`;
+  indicator.classList.add('on');
+  if (firstShow) {
+    void indicator.offsetWidth;          // إجبار المتصفح على تثبيت الموضع
+    indicator.style.transition = '';     // ثم إعادة تفعيل الانسياب للانتقالات القادمة
+  }
 }
 
 function renderRoundsIfOpen() {
@@ -1106,6 +1147,7 @@ function bindEvents() {
     updateManualWinnerBtnState();
     checkWinner();
     ensureChatAlive();   // ضمان صارم: الدردشة لا تختفي أبداً أثناء مشاركة نشطة
+    updateBarActive();   // تمييز القائمة النشطة يبقى دقيقاً دائماً
   }, REFRESH_MS);
 }
 
@@ -1792,8 +1834,8 @@ function ensureChatAlive() {
 }
 
 function bindChatLayout() {
-  window.addEventListener('resize', layoutChatPosition);
-  window.addEventListener('orientationchange', layoutChatPosition);
+  window.addEventListener('resize', () => { layoutChatPosition(); updateBarActive(); });
+  window.addEventListener('orientationchange', () => { layoutChatPosition(); updateBarActive(); });
   if (window.visualViewport) {
     window.visualViewport.addEventListener('resize', layoutChatPosition);
     window.visualViewport.addEventListener('scroll', layoutChatPosition);
@@ -2228,6 +2270,7 @@ async function openProfileScreen(uid) {
   document.getElementById('profileScreen').classList.remove('hidden');
   const cached = profilesCache[uid];
   renderProfileScreen(uid, cached || null);
+  updateBarActive();
   const fresh = await fetchProfile(uid);
   if (profileViewUid === uid) renderProfileScreen(uid, fresh);
 }
@@ -2683,6 +2726,7 @@ function openOwnerScreen() {
   updateOwnerVisBtn();
   renderReportsList();
   renderLiveList();
+  updateBarActive();
 }
 
 function vipShowError(msg) {
@@ -3200,6 +3244,7 @@ function init() {
   handleProfileParam();
   // زر لوحة المالك — يظهر للمالك وحده
   if (isOwner()) document.getElementById('ownerBtn').classList.remove('hidden');
+  updateBarActive();
 
   if (VIEWER_MODE) {
     startViewerMode();
