@@ -9,7 +9,7 @@
   <meta name="theme-color" content="#ffffff" />
   <link rel="manifest" href="manifest.json" />
   <link rel="apple-touch-icon" href="icon-192.png" />
-  <link rel="stylesheet" href="styles.css?v=13" />
+  <link rel="stylesheet" href="styles.css?v=14" />
   <title>المداقش — نشرة الحكم</title>
 </head>
 <body>
@@ -51,18 +51,17 @@
     </div>
   </main>
 
-  <!-- شاشة الفائز -->
-  <section id="winnerScreen" class="screen hidden" aria-hidden="true">
-    <div class="winner-card">
-      <div class="winner-content">
-        <p class="winner-line-1">مبروك للفائز</p>
-        <p id="winnerName" class="winner-line-2">—</p>
-        <p id="winnerAmountDisplay" class="winner-line-3">$0k</p>
-      </div>
-      <button id="backBtn" class="back-btn" type="button">
-        &lt; رجوع للقائمة
-      </button>
+  <!-- شاشة الفائز: فيديو ملء الشاشة + الاسم والمبلغ فوقه -->
+  <section id="winnerScreen" class="winner-screen hidden" aria-hidden="true">
+    <video id="winnerVideo" class="winner-video"
+           src="winner-bg.mp4" muted loop playsinline preload="auto"></video>
+    <div class="winner-overlay">
+      <p id="winnerName" class="winner-line-2">—</p>
+      <p id="winnerAmountDisplay" class="winner-line-3">$0k</p>
     </div>
+    <button id="backBtn" class="back-btn winner-back" type="button">
+      &lt; رجوع للقائمة
+    </button>
   </section>
 
   <!-- صفحة معلومات المطور -->
@@ -134,6 +133,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=13"></script>
+  <script src="app.js?v=14"></script>
 </body>
 </html>

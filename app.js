@@ -11,7 +11,7 @@
    - شاشة فوز بنظام الإقرار + زر "الفائز" اليدوي
    ==================================================================== */
 
-const APP_VERSION    = 13;             // يجب أن يطابق version.json و ?v= في index.html
+const APP_VERSION    = 14;             // يجب أن يطابق version.json و ?v= في index.html
 const PLAYERS_COUNT  = 10;
 const STORAGE_KEY    = 'madagish.v1';
 const REFRESH_MS     = 3000;
@@ -75,6 +75,7 @@ const el = {
   confirmCancel:       document.getElementById('confirmCancel'),
   winnerName:          document.getElementById('winnerName'),
   winnerAmountDisplay: document.getElementById('winnerAmountDisplay'),
+  winnerVideo:         document.getElementById('winnerVideo'),
   backBtn:             document.getElementById('backBtn')
 };
 
@@ -113,6 +114,22 @@ function playerBalance(p) {
 
 function playerLabel(idx) {
   return state.players[idx].name || `اللاعب ${idx + 1}`;
+}
+
+/* ============ إشعار عابر (Toast) ============ */
+let toastTimer = null;
+function showToast(text) {
+  let t = document.getElementById('appToast');
+  if (!t) {
+    t = document.createElement('div');
+    t.id = 'appToast';
+    t.className = 'app-toast';
+    document.body.appendChild(t);
+  }
+  t.textContent = text;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2400);
 }
 
 /* ============ ضبط عرض كبسولة الاسم على مقاس النص ============ */
@@ -580,6 +597,15 @@ function bindBalanceInput(input, idx) {
     recordAction(action);
     action.logRef = addRoundLine(idx, newBalance);   // سطر في دفتر الجولات (أو null لحقل بلا اسم قط)
 
+    // إشعار عابر يوضح للحكم ماذا حدث بالضبط (يكشف الأخطاء فوراً)
+    if (delta === 0) {
+      showToast(`القانون: 0 = الرصيد ${formatAmount(-1)}`);
+    } else if (delta > 0) {
+      showToast(`أُضيف ${delta} — الرصيد ${formatAmount(newBalance)}`);
+    } else {
+      showToast(`خُصم ${-delta} — الرصيد ${formatAmount(newBalance)}`);
+    }
+
     state.winnerShown = false;
     saveState();
 
@@ -697,6 +723,12 @@ function showWinner(idx) {
   el.winnerScreen.setAttribute('aria-hidden', 'false');
   state.winnerShown = true;
   state.currentWinnerIdx = idx;
+  // تشغيل فيديو الاحتفال من البداية (مكتوم + لوب)
+  try {
+    el.winnerVideo.currentTime = 0;
+    const pr = el.winnerVideo.play();
+    if (pr && pr.catch) pr.catch(() => {});
+  } catch (_) {}
 }
 
 /* ============ الصفحات الفرعية (معلومات المطور / سجل الجولات) ============ */
@@ -804,6 +836,7 @@ function hideWinner() {
     state.acknowledgedWinners.add(state.currentWinnerIdx);
     saveState();
   }
+  try { el.winnerVideo.pause(); } catch (_) {}
   el.winnerScreen.classList.add('hidden');
   el.winnerScreen.setAttribute('aria-hidden', 'true');
   el.listScreen.classList.remove('hidden');
@@ -900,6 +933,7 @@ function resetAll() {
   state.currentWinnerIdx = null;
   saveState();
   closeSubScreens();
+  try { el.winnerVideo.pause(); } catch (_) {}
   el.winnerScreen.classList.add('hidden');
   el.winnerScreen.setAttribute('aria-hidden', 'true');
   el.listScreen.classList.remove('hidden');
@@ -943,10 +977,47 @@ function bindEvents() {
   bindOutsideTapDismiss();
 
   setInterval(() => {
+    // مزامنة مؤجلة من تبويب آخر (كانت الكتابة جارية وقت وصولها)
+    if (pendingStorageSync && !(document.activeElement instanceof HTMLInputElement)) {
+      pendingStorageSync = false;
+      reloadFromStorage();
+      return;
+    }
     applyColorsToRows();
     updateManualWinnerBtnState();
     checkWinner();
   }, REFRESH_MS);
+}
+
+/* ============ مزامنة التبويبات على نفس الجهاز ============
+   لو الحكم فتح الرابط في تبويبين، أي كتابة من تبويب تُحدِّث الآخر فوراً
+   — يمنع تضارب الحالات (فوز خاطئ من مبلغ قديم، قفزات أرصدة). */
+let pendingStorageSync = false;
+
+function reloadFromStorage() {
+  state.winnerAmount = null;
+  state.players = Array.from({ length: PLAYERS_COUNT }, newPlayer);
+  state.actionLog = [];
+  state.actionIndex = -1;
+  state.capitalSet = false;
+  state.roundsLog = [];
+  state.roundsSeq = 0;
+  state.acknowledgedWinners = new Set();
+  loadState();
+  render();
+  renderRoundsIfOpen();
+}
+
+function bindCrossTabSync() {
+  window.addEventListener('storage', (e) => {
+    if (e.key !== STORAGE_KEY) return;
+    // لا نقاطع الحكم وهو يكتب — نؤجل للمزامنة عند أول فرصة
+    if (document.activeElement instanceof HTMLInputElement) {
+      pendingStorageSync = true;
+      return;
+    }
+    reloadFromStorage();
+  });
 }
 
 /* ============ التحديث التلقائي (كسر كاش الجوال) ============ */
@@ -1062,6 +1133,7 @@ function startPresence() {
 function init() {
   loadState();
   bindEvents();
+  bindCrossTabSync();
   render();
   startUpdateChecker();
   startPresence();
