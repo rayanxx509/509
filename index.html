@@ -9,7 +9,7 @@
   <meta name="theme-color" content="#ffffff" />
   <link rel="manifest" href="manifest.json" />
   <link rel="apple-touch-icon" href="icon-192.png" />
-  <link rel="stylesheet" href="styles.css?v=18" />
+  <link rel="stylesheet" href="styles.css?v=20" />
   <title>المداقش — نشرة الحكم</title>
 </head>
 <body>
@@ -75,6 +75,21 @@
       </p>
       <p class="page-text page-credit">برمجة وتطوير أبو ريان 509 | قروب المجرَّشين 2026</p>
       <p class="page-text">إيميل : <span class="page-email">rayanswahel@gmail.com</span></p>
+
+      <h3 class="page-stats-title">الإحصائيات:</h3>
+      <p class="page-stat">
+        عدد الحُكَام الذين يستخدمون التطبيق الآن بشكل عام مع اصدقائهم بنشرات مُختلفه :
+        <span class="stat-live"><span class="online-dot"></span> مُباشر <span id="statJudges">—</span></span>
+      </p>
+      <p class="page-stat">
+        عدد المتواجدين بالتطبيق بشكل عام :
+        <span class="stat-live"><span class="online-dot"></span> مُباشر <span id="statOnline">—</span></span>
+      </p>
+      <p class="page-stat">
+        عدد زوار التطبيق بشكل عام لهذا الشهر :
+        <span class="stat-month"><span id="statMonthly">—</span> زائر شهرياً</span>
+      </p>
+
       <button id="devBackBtn" class="back-btn" type="button">
         &lt; رجوع للقائمة
       </button>
@@ -119,10 +134,6 @@
       <span id="shareBtnLabel" class="bar-label">مشاركة النشرة</span>
       <span id="shareViewersCount" class="bar-sub hidden">👁 0</span>
     </button>
-    <div id="onlineCounter" class="bar-item bar-online hidden" aria-live="polite">
-      <span class="online-dot"></span>
-      <span id="onlineCountText">المتصلون الآن: —</span>
-    </div>
     <div class="bar-spacer"></div>
   </nav>
 
@@ -181,6 +192,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=18"></script>
+  <script src="app.js?v=20"></script>
 </body>
 </html>

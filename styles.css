@@ -694,6 +694,36 @@ body.viewer-mode .winner-amount-input {
   margin-top: 10px;
 }
 
+/* قسم الإحصائيات في صفحة المطور */
+.page-stats-title {
+  font-size: 18px;
+  font-weight: 800;
+  margin: 14px 0 2px;
+  text-align: right;
+  border-top: 1px solid #eee;
+  padding-top: 14px;
+}
+.page-stat {
+  font-size: 13.5px;
+  line-height: 1.9;
+  color: #374151;
+  margin: 0;
+  text-align: right;
+}
+.stat-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #16A34A;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.stat-month {
+  color: #B45309;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
 /* ======= جدول سجل الجولات ======= */
 .rounds-table {
   display: flex;

@@ -11,7 +11,7 @@
    - شاشة فوز بنظام الإقرار + زر "الفائز" اليدوي
    ==================================================================== */
 
-const APP_VERSION    = 18;             // يجب أن يطابق version.json و ?v= في index.html
+const APP_VERSION    = 20;             // يجب أن يطابق version.json و ?v= في index.html
 const PLAYERS_COUNT  = 10;
 const STORAGE_KEY    = 'madagish.v1';
 const REFRESH_MS     = 3000;
@@ -805,6 +805,8 @@ function openDevScreen() {
   el.listScreen.classList.add('hidden');
   el.devScreen.classList.remove('hidden');
   el.devScreen.setAttribute('aria-hidden', 'false');
+  refreshStatsDisplay();
+  fetchMonthlyVisits();
 }
 
 function openRoundsScreen() {
@@ -1050,6 +1052,7 @@ function bindEvents() {
   el.roundsBackBtn.addEventListener('click', backToList);
   document.getElementById('shareBtn').addEventListener('click', onShareBtnClick);
   bindChatEvents();
+  bindChatLayout();
 
   bindOutsideTapDismiss();
 
@@ -1575,6 +1578,7 @@ function setChatVisible(visible) {
   root.classList.toggle('hidden', !visible);
   showBtn.classList.toggle('hidden', visible || !chatShareId);
   try { localStorage.setItem('madagish.chatVisible', visible ? '1' : '0'); } catch (_) {}
+  layoutChatPosition();
 }
 
 function chatPreferredVisible() {
@@ -1634,6 +1638,36 @@ async function openModList() {
   overlay.classList.remove('hidden');
 }
 
+/* تموضع ديناميكي للدردشة: فوق الشريط السفلي الفعلي + فوق شريط المتصفح/الكيبورد
+   يقيس الارتفاعات الحقيقية بدل أرقام ثابتة — يتكيف مع سفاري وكروم وأي متصفح */
+function layoutChatPosition() {
+  const root    = document.getElementById('chatRoot');
+  const showBtn = document.getElementById('chatShowBtn');
+  if (!root && !showBtn) return;
+
+  const bar = document.getElementById('bottomBar');
+  const barH = (bar && !bar.classList.contains('hidden')) ? bar.offsetHeight : 0;
+
+  // الجزء المحجوب من أسفل الشاشة (شريط سفاري العائم أو الكيبورد المفتوح)
+  let occluded = 0;
+  if (window.visualViewport) {
+    occluded = Math.max(0, window.innerHeight - window.visualViewport.height - window.visualViewport.offsetTop);
+  }
+
+  const bottom = barH + occluded + 10;
+  if (root)    root.style.bottom    = bottom + 'px';
+  if (showBtn) showBtn.style.bottom = (bottom + 4) + 'px';
+}
+
+function bindChatLayout() {
+  window.addEventListener('resize', layoutChatPosition);
+  window.addEventListener('orientationchange', layoutChatPosition);
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', layoutChatPosition);
+    window.visualViewport.addEventListener('scroll', layoutChatPosition);
+  }
+}
+
 function startChat(shareId, isJudge) {
   chatShareId = shareId;
   chatIsJudge = isJudge;
@@ -1644,6 +1678,8 @@ function startChat(shareId, isJudge) {
   if (modBtn) modBtn.classList.toggle('hidden', !isJudge);
 
   setChatVisible(chatPreferredVisible());
+  layoutChatPosition();
+  setTimeout(layoutChatPosition, 300);   // بعد استقرار تخطيط الصفحة والخطوط
   clearInterval(chatTimer);
   chatTimer = setInterval(pollChat, CHAT_POLL_MS);
   pollChat();
@@ -1681,12 +1717,19 @@ function bindChatEvents() {
 }
 
 /* ============ عدّاد المتصلين الآن (Firebase REST — بدون مكتبات) ============ */
+/* آخر الأرقام الحية — تُعرض في قسم الإحصائيات بصفحة المطور */
+let statOnlineNow = null;
+let statJudgesNow = null;
+
+function refreshStatsDisplay() {
+  const jEl = document.getElementById('statJudges');
+  const oEl = document.getElementById('statOnline');
+  if (jEl && statJudgesNow !== null) jEl.textContent = String(statJudgesNow);
+  if (oEl && statOnlineNow !== null) oEl.textContent = String(statOnlineNow);
+}
+
 function startPresence() {
   if (!PRESENCE_DB_URL) return;   // الميزة معطلة حتى يُضبط الرابط
-  const counterEl = document.getElementById('onlineCounter');
-  const textEl    = document.getElementById('onlineCountText');
-  if (!counterEl || !textEl) return;
-  counterEl.classList.remove('hidden');
 
   // معرّف فريد لهذا التبويب
   let myId = null;
@@ -1703,37 +1746,48 @@ function startPresence() {
   const base   = PRESENCE_DB_URL.replace(/\/+$/, '');
   const myUrl  = `${base}/presence/${myId}.json`;
   const allUrl = `${base}/presence.json`;
+  const myRole = VIEWER_MODE ? 'v' : 'j';   // حكم أم مشاهد — لإحصائية الحُكّام
 
   async function beatAndCount() {
     try {
-      // 1) نبضة: سجّل نفسي بختم وقت السيرفر (لا نعتمد على ساعة الجهاز)
+      // 1) نبضة: سجّل نفسي بختم وقت السيرفر + دوري (حكم/مشاهد)
       await fetch(myUrl, {
         method: 'PUT',
-        body: JSON.stringify({ ts: { '.sv': 'timestamp' } })
+        body: JSON.stringify({ ts: { '.sv': 'timestamp' }, r: myRole })
       });
       // 2) اقرأ الجميع واحسب من نبض حديثاً
       const res = await fetch(allUrl, { cache: 'no-store' });
       if (!res.ok) return;
       const data = await res.json();
       if (!data || typeof data !== 'object') {
-        textEl.textContent = 'المتصلون الآن: 1';
+        statOnlineNow = 1;
+        statJudgesNow = myRole === 'j' ? 1 : 0;
+        refreshStatsDisplay();
         return;
       }
       let maxTs = 0;
       const entries = [];
       for (const k of Object.keys(data)) {
-        const ts = (data[k] && typeof data[k].ts === 'number') ? data[k].ts : 0;
-        entries.push({ k, ts });
+        const e = data[k];
+        const ts = (e && typeof e.ts === 'number') ? e.ts : 0;
+        const r  = (e && e.r === 'j') ? 'j' : 'v';
+        entries.push({ k, ts, r });
         if (ts > maxTs) maxTs = ts;
       }
       // المقارنة نسبية لأحدث نبضة (ختم سيرفر) — مستقلة عن ساعات الأجهزة
-      let count = 0;
+      let total = 0, judges = 0;
       const stale = [];
       for (const e of entries) {
-        if (maxTs - e.ts < PRESENCE_FRESH_MS) count++;
-        else if (maxTs - e.ts > 120000) stale.push(e.k);
+        if (maxTs - e.ts < PRESENCE_FRESH_MS) {
+          total++;
+          if (e.r === 'j') judges++;
+        } else if (maxTs - e.ts > 120000) {
+          stale.push(e.k);
+        }
       }
-      textEl.textContent = 'المتصلون الآن: ' + Math.max(1, count);
+      statOnlineNow = Math.max(1, total);
+      statJudgesNow = judges;
+      refreshStatsDisplay();
       // تنظيف عرضي للسجلات الميتة (من أغلق دون تسجيل خروج)
       if (stale.length && Math.random() < 0.25) {
         for (const k of stale.slice(0, 10)) {
@@ -1752,6 +1806,35 @@ function startPresence() {
   });
 }
 
+/* ============ عدّاد الزوار الشهري ============ */
+function monthKey() {
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+}
+
+function recordMonthlyVisit() {
+  if (!PRESENCE_DB_URL) return;
+  const ym = monthKey();
+  const flag = 'madagish.visited.' + ym;
+  try { if (sessionStorage.getItem(flag)) return; sessionStorage.setItem(flag, '1'); } catch (_) {}
+  // زيادة ذرّية على خادم Firebase — كل جلسة تُحسب مرة واحدة في الشهر
+  fetch(`${DB_BASE}/stats/visits/${ym}.json`, {
+    method: 'PUT',
+    body: JSON.stringify({ '.sv': { 'increment': 1 } })
+  }).catch(() => {});
+}
+
+async function fetchMonthlyVisits() {
+  const el2 = document.getElementById('statMonthly');
+  if (!el2) return;
+  try {
+    const res = await fetch(`${DB_BASE}/stats/visits/${monthKey()}.json?t=` + Date.now(), { cache: 'no-store' });
+    if (!res.ok) return;
+    const n = await res.json();
+    el2.textContent = (typeof n === 'number') ? String(n) : '0';
+  } catch (_) {}
+}
+
 /* ============ الإقلاع ============ */
 function init() {
   loadState();
@@ -1761,6 +1844,7 @@ function init() {
   updateShareBtn();
   startUpdateChecker();
   startPresence();
+  recordMonthlyVisit();
 
   if (VIEWER_MODE) {
     startViewerMode();
