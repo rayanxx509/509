@@ -9,7 +9,7 @@
   <meta name="theme-color" content="#ffffff" />
   <link rel="manifest" href="manifest.json" />
   <link rel="apple-touch-icon" href="icon-192.png" />
-  <link rel="stylesheet" href="styles.css?v=27" />
+  <link rel="stylesheet" href="styles.css?v=30" />
   <title>المداقش — نشرة الحكم</title>
 </head>
 <body>
@@ -286,6 +286,7 @@
         <span id="sheetUser" class="sheet-user"></span>
       </div>
     </div>
+    <button id="sheetReplyBtn" class="sheet-reply" type="button">↩ الرد عليه</button>
   </div>
 
   <!-- نافذة تعديل الاسم -->
@@ -322,6 +323,10 @@
   <!-- الدردشة الحية (أثناء المشاركة فقط) — أسلوب تيك توك -->
   <div id="chatRoot" class="chat-root hidden" aria-live="polite">
     <div id="chatFeed" class="chat-feed"></div>
+    <div id="chatNotices" class="chat-notices">
+      <button id="mentionPill" class="mention-pill collapsed" type="button">@تم ذكرك</button>
+      <span id="joinPill" class="join-pill collapsed"></span>
+    </div>
     <div class="chat-input-row">
       <button id="chatHideBtn" class="chat-icon-btn" type="button" aria-label="إخفاء الدردشة" title="إخفاء الدردشة">
         <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><line x1="4" y1="4" x2="20" y2="20"/></svg>
@@ -333,9 +338,6 @@
       </button>
       <button id="viewersBtn" class="chat-icon-btn" type="button" aria-label="المشاهدون الآن" title="المشاهدون الآن">
         <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7.5 11-7.5S23 12 23 12s-4 7.5-11 7.5S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>
-      </button>
-      <button id="chatModBtn" class="chat-icon-btn hidden" type="button" aria-label="إدارة المشاهدين" title="إدارة المشاهدين">
-        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
       </button>
     </div>
   </div>
@@ -353,17 +355,6 @@
       <div id="viewersList" class="mod-list"></div>
       <div class="confirm-actions">
         <button id="viewersCloseBtn" class="btn-secondary" type="button">إغلاق</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- نافذة إدارة المشاهدين (كتم/فك — للحكم فقط) -->
-  <div id="modOverlay" class="overlay hidden" aria-hidden="true">
-    <div class="confirm-box" role="dialog" aria-modal="true">
-      <h2 class="confirm-title">إدارة المشاهدين</h2>
-      <div id="modList" class="mod-list"></div>
-      <div class="confirm-actions">
-        <button id="modCloseBtn" class="btn-secondary" type="button">إغلاق</button>
       </div>
     </div>
   </div>
@@ -388,6 +379,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=27"></script>
+  <script src="app.js?v=30"></script>
 </body>
 </html>

@@ -11,7 +11,7 @@
    - شاشة فوز بنظام الإقرار + زر "الفائز" اليدوي
    ==================================================================== */
 
-const APP_VERSION    = 27;             // يجب أن يطابق version.json و ?v= في index.html
+const APP_VERSION    = 30;             // يجب أن يطابق version.json و ?v= في index.html
 const PLAYERS_COUNT  = 10;
 const STORAGE_KEY    = 'madagish.v1';
 const REFRESH_MS     = 3000;
@@ -127,6 +127,17 @@ function playerBalance(p) {
 
 function playerLabel(idx) {
   return state.players[idx].name || `اللاعب ${idx + 1}`;
+}
+
+/* تنقية صامتة: إزالة أي روابط من النص (حماية خلفية بدون إشعار المستخدم) */
+function stripLinks(s) {
+  if (typeof s !== 'string') return s;
+  return s
+    .replace(/https?:\/\/\S+/gi, '')
+    .replace(/www\.\S+/gi, '')
+    .replace(/\S+\.(com|net|org|io|co|me|xyz|info|link|site|online|shop|tv|cc|app|dev|gg)(\/\S*)?/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 /* ============ إشعار عابر (Toast) ============ */
@@ -561,7 +572,8 @@ function bindNameInput(input, idx) {
   // الكبسولة تتمدد مع الكتابة حرفاً بحرف
   input.addEventListener('input', () => fitNameInput(input));
   input.addEventListener('blur', () => {
-    const v = input.value.trim();
+    const v = stripLinks(input.value.trim());   // حماية خلفية: لا روابط في أسماء اللاعبين
+    input.value = v;
     state.players[idx].name = v === '' ? null : v;
     saveState();
     fitNameInput(input);
@@ -826,6 +838,7 @@ function openRoundsScreen() {
 function backToList() {
   closeSubScreens();
   el.listScreen.classList.remove('hidden');
+  if (typeof ensureChatAlive === 'function') ensureChatAlive();
 }
 
 function renderRoundsIfOpen() {
@@ -1073,6 +1086,7 @@ function bindEvents() {
     applyColorsToRows();
     updateManualWinnerBtnState();
     checkWinner();
+    ensureChatAlive();   // ضمان صارم: الدردشة لا تختفي أبداً أثناء مشاركة نشطة
   }, REFRESH_MS);
 }
 
@@ -1498,6 +1512,8 @@ async function sendChatMessage() {
     await fetch(chatUrl('chat.json'), { method: 'POST', body: JSON.stringify(msg) });
     pollChat();   // اعرضها فوراً
   } catch (_) { showToast('تعذر الإرسال — تحقق من الشبكة'); }
+  // بعد الإرسال (بأي طريقة): يُغلق الكيبورد تلقائياً وجاهز لفتح جديد بلمسة
+  try { input.blur(); } catch (_) {}
 }
 
 function postJoinNotice(nick) {
@@ -1510,6 +1526,61 @@ function postJoinNotice(nick) {
   }).catch(() => {});
 }
 
+/* ============ إشعارات المنشن والانضمام (كبسولات فوق حقل الكتابة) ============ */
+let chatNotifBaseline = null;    // آخر مفتاح رسالة عولج — لتجاهل التاريخ القديم عند الدخول
+let mentionTimer = null;
+let joinTimer = null;
+let mentionTargetKey = null;
+
+function mentionsMe(text) {
+  if (typeof text !== 'string' || !text.includes('@')) return false;
+  // المطابقة باليوزر الفريد فقط — صاحب اليوزر نفسه حصرياً يرى "@تم ذكرك"
+  // (الأسماء تتكرر بين الناس فلا تصلح لتحديد المقصود)
+  const u = myProfile && myProfile.username ? myProfile.username.toLowerCase() : null;
+  if (!u) return false;
+  return text.toLowerCase().includes('@' + u);
+}
+
+function showMentionPill(msgKey) {
+  const pill = document.getElementById('mentionPill');
+  if (!pill) return;
+  mentionTargetKey = msgKey;
+  pill.classList.remove('collapsed');
+  clearTimeout(mentionTimer);
+  mentionTimer = setTimeout(() => pill.classList.add('collapsed'), 60000);   // دقيقة كاملة
+}
+
+function showJoinPill(name) {
+  const pill = document.getElementById('joinPill');
+  if (!pill) return;
+  pill.textContent = 'انضم - ' + name;
+  pill.classList.remove('collapsed');
+  clearTimeout(joinTimer);
+  joinTimer = setTimeout(() => pill.classList.add('collapsed'), 10000);      // 10 ثوانٍ
+}
+
+function hideChatNotices() {
+  clearTimeout(mentionTimer);
+  clearTimeout(joinTimer);
+  const mp = document.getElementById('mentionPill');
+  const jp = document.getElementById('joinPill');
+  if (mp) mp.classList.add('collapsed');
+  if (jp) jp.classList.add('collapsed');
+  mentionTargetKey = null;
+  chatNotifBaseline = null;
+}
+
+function scrollToMention() {
+  if (!mentionTargetKey) return;
+  const feed = document.getElementById('chatFeed');
+  const row = feed && feed.querySelector(`[data-key="${mentionTargetKey}"]`);
+  if (row) {
+    row.scrollIntoView({ behavior: 'smooth', block: 'center' });   // انزلاق سلس للرسالة
+  } else if (feed) {
+    feed.scrollTo({ top: 0, behavior: 'smooth' });                 // الرسالة خرجت من النافذة — لأقدم المعروض
+  }
+}
+
 function renderChatFeed(data) {
   const feed = document.getElementById('chatFeed');
   if (!feed) return;
@@ -1518,6 +1589,23 @@ function renderChatFeed(data) {
 
   const keys = Object.keys(data).sort();   // مفاتيح Firebase POST مرتبة زمنياً
   chatParticipants = {};
+
+  // معالجة الإشعارات: فقط الرسائل الأحدث من خط الأساس (لا نُشعر بالتاريخ القديم عند الدخول)
+  const firstLoad = chatNotifBaseline === null;
+  for (const k of keys) {
+    const m = data[k];
+    if (!m || typeof m !== 'object') continue;
+    if (!firstLoad && k > chatNotifBaseline) {
+      const mUid = (typeof m.uid === 'string') ? m.uid : null;
+      if (m.sys === 1) {
+        if (mUid !== chatUid()) showJoinPill(((typeof m.n === 'string' ? m.n : '') || 'مشاهد').slice(0, 20));
+      } else if (mUid !== chatUid() && mentionsMe(m.t)) {
+        showMentionPill(k);
+      }
+    }
+  }
+  if (keys.length) chatNotifBaseline = keys[keys.length - 1];
+
   for (const k of keys) {
     const m = data[k];
     if (!m || typeof m !== 'object') continue;
@@ -1525,21 +1613,26 @@ function renderChatFeed(data) {
     const uid  = (typeof m.uid === 'string') ? m.uid : null;
     if (uid) chatParticipants[uid] = { name: name || 'مشاهد', j: m.j === 1 };
 
+    // الانضمام لم يعد فقاعة داخل المحادثة — صار كبسولة إشعار ثابتة
+    if (m.sys === 1) continue;
+
     const row = document.createElement('div');
-    if (m.sys === 1) {
-      row.className = 'chat-msg sys';
-      const j = document.createElement('span');
-      j.className = 'chat-join';
-      j.textContent = `انضم - ${name || 'مشاهد'}`;
-      row.appendChild(j);
-    } else {
+    row.dataset.key = k;
+    {
       row.className = 'chat-msg';
+      // الأفتار أقصى اليمين (أسلوب تيك توك)
+      const avEl = document.createElement('span');
+      avEl.className = 'chat-av';
+      avEl.innerHTML = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.6"/><path d="M5 20v-1a5.5 5.5 0 0 1 5.5-5.5h3A5.5 5.5 0 0 1 19 19v1"/></svg>';
+      if (uid) fillAvatar(avEl, uid);
+      row.appendChild(avEl);
+
       const nEl = document.createElement('span');
       const isOwnerMsg = uid === ADMIN_UID;
       nEl.className = 'chat-name' + (m.j === 1 ? ' judge' : '') + (isOwnerMsg ? ' owner' : '');
       let label;
-      if (isOwnerMsg) label = (name || 'المالك') + ' ( المالك )';
-      else if (m.j === 1) label = '👑 الحكم';
+      if (isOwnerMsg) label = '👑 ' + (name || 'المالك') + ' ( المالك )';   // شارة التاج للمالك
+      else if (m.j === 1) label = '⚖️ الحكم';                               // ميزان العدل للحكم
       else label = name || 'مشاهد';
       nEl.textContent = label + ' -';
       // الضغط على الاسم يفتح بطاقة المستخدم (Bottom Sheet)
@@ -1572,13 +1665,18 @@ async function pollChat() {
     if (!isOwner()) {
       const mres = await fetch(chatUrl(`muted/${chatUid()}.json`) + '?t=' + Date.now(), { cache: 'no-store' });
       if (mres.ok) {
-        const muted = (await mres.json()) === 1;
+        const mval = await mres.json();
+        const muted = !!mval;
         if (muted !== chatMuted) {
           chatMuted = muted;
           const input = document.getElementById('chatInput');
           if (input) {
             input.disabled = muted;
-            input.placeholder = muted ? 'تم كتم صوتك من قبل الحكم 🔇' : 'اكتب...';
+            // الرسالة حسب من قام بالكتم: المالك أم الحكم
+            const byOwner = mval && typeof mval === 'object' && mval.b === 'o';
+            input.placeholder = muted
+              ? (byOwner ? 'قام المالك بكتم صوتك 🔇' : 'تم كتم صوتك من قبل الحكم 🔇')
+              : 'اكتب...';
           }
         }
       }
@@ -1601,73 +1699,7 @@ function chatPreferredVisible() {
   try { return localStorage.getItem('madagish.chatVisible') !== '0'; } catch (_) { return true; }
 }
 
-/* قائمة إدارة المشاهدين (كتم/فك — للحكم) */
-async function openModList() {
-  const overlay = document.getElementById('modOverlay');
-  const list = document.getElementById('modList');
-  if (!overlay || !list) return;
-  list.innerHTML = '';
-
-  let mutedMap = {};
-  try {
-    const res = await fetch(chatUrl('muted.json') + '?t=' + Date.now(), { cache: 'no-store' });
-    if (res.ok) mutedMap = (await res.json()) || {};
-  } catch (_) {}
-
-  // المالك يرى الجميع (حتى الحكم)؛ الحكم يرى المشاهدين فقط؛ ولا أحد يرى نفسه أو المالك
-  const uids = Object.keys(chatParticipants).filter(uid => {
-    if (uid === chatUid()) return false;              // نفسه
-    if (uid === ADMIN_UID) return false;              // المالك محصّن من الكتم
-    const e = chatParticipants[uid];
-    if (e.j && !isOwner()) return false;              // الحكم لا يظهر إلا للمالك
-    return true;
-  });
-  if (uids.length === 0) {
-    const empty = document.createElement('div');
-    empty.className = 'mod-empty';
-    empty.textContent = 'لا يوجد مشاهدون كتبوا في الدردشة بعد.';
-    list.appendChild(empty);
-  } else {
-    // اجلب اليوزر الثابت لكل مشارك — المزعج الذي يغيّر اسمه لا يفرّ من الحكم
-    const unamePromises = uids.map(async (uid) => {
-      const p = profilesCache[uid] || await fetchProfile(uid);
-      return [uid, p && p.username ? '@' + p.username : ''];
-    });
-    const unames = Object.fromEntries(await Promise.all(unamePromises));
-
-    for (const uid of uids) {
-      const entry = chatParticipants[uid];
-      const row = document.createElement('div');
-      row.className = 'mod-row';
-      const nameEl = document.createElement('span');
-      nameEl.className = 'mod-name';
-      nameEl.textContent = (entry.j ? '👑 ' : '') + entry.name + (unames[uid] ? ' ( ' + unames[uid] + ' )' : '');
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      let isMuted = mutedMap[uid] === 1;
-      const paint = () => {
-        btn.className = 'mod-btn' + (isMuted ? ' muted' : '');
-        btn.textContent = isMuted ? 'فك الكتم' : 'كتم';
-      };
-      paint();
-      btn.addEventListener('click', async () => {
-        try {
-          if (isMuted) {
-            await fetch(chatUrl(`muted/${uid}.json`), { method: 'DELETE' });
-          } else {
-            await fetch(chatUrl(`muted/${uid}.json`), { method: 'PUT', body: '1' });
-          }
-          isMuted = !isMuted;
-          paint();
-        } catch (_) { showToast('تعذر التنفيذ — تحقق من الشبكة'); }
-      });
-      row.appendChild(nameEl);
-      row.appendChild(btn);
-      list.appendChild(row);
-    }
-  }
-  overlay.classList.remove('hidden');
-}
+/* (أُدمجت إدارة الكتم داخل قائمة "المشاهدون الآن" — openViewersList) */
 
 /* تموضع ديناميكي للدردشة: فوق الشريط السفلي الفعلي + فوق شريط المتصفح/الكيبورد
    يقيس الارتفاعات الحقيقية بدل أرقام ثابتة — يتكيف مع سفاري وكروم وأي متصفح */
@@ -1685,9 +1717,31 @@ function layoutChatPosition() {
     occluded = Math.max(0, window.innerHeight - window.visualViewport.height - window.visualViewport.offsetTop);
   }
 
-  const bottom = barH + occluded + 10;
+  let bottom = barH + occluded + 10;
+  // سقف أمان: لا يطير الشات فوق منتصف الشاشة أبداً (قياس عابر خاطئ لن يخفيه)
+  const cap = Math.max(120, Math.floor(window.innerHeight * 0.55));
+  if (bottom > cap) bottom = barH + 10;
   if (root)    root.style.bottom    = bottom + 'px';
   if (showBtn) showBtn.style.bottom = (bottom + 4) + 'px';
+}
+
+/* شفاء ذاتي صارم: طالما المشاركة نشطة، الدردشة تظهر إلزامياً
+   (يُستدعى دورياً وعند كل عودة للقائمة — يعالج أي حالة خفيت فيها لأي سبب) */
+function ensureChatAlive() {
+  if (!chatShareId || viewerEnded) return;
+  const root = document.getElementById('chatRoot');
+  const showBtn = document.getElementById('chatShowBtn');
+  if (!root || !showBtn) return;
+  const wantVisible = chatPreferredVisible();
+  const rootHidden = root.classList.contains('hidden');
+  const btnHidden = showBtn.classList.contains('hidden');
+  if (wantVisible && rootHidden) {
+    root.classList.remove('hidden');
+    showBtn.classList.add('hidden');
+  } else if (!wantVisible && rootHidden && btnHidden) {
+    showBtn.classList.remove('hidden');   // مخفي باختياره — زر الإظهار لازم يبقى موجوداً
+  }
+  layoutChatPosition();
 }
 
 function bindChatLayout() {
@@ -1697,6 +1751,21 @@ function bindChatLayout() {
     window.visualViewport.addEventListener('resize', layoutChatPosition);
     window.visualViewport.addEventListener('scroll', layoutChatPosition);
   }
+}
+
+/* تعبئة أفتار عنصر من ملف صاحبه (كسول + كاش) */
+function fillAvatar(el2, uid) {
+  const p = profilesCache[uid];
+  const set = (prof) => {
+    if (prof && prof.avatar) {
+      el2.innerHTML = '';
+      const img = document.createElement('img');
+      img.src = prof.avatar; img.alt = '';
+      el2.appendChild(img);
+    }
+  };
+  if (p) { set(p); return; }
+  fetchProfile(uid).then(set).catch(() => {});
 }
 
 /* وضع ظهور المالك في قوائم المشاهدين (افتراضياً: مخفي) */
@@ -1731,16 +1800,29 @@ function chatHeartbeat() {
   fetch(url, { method: 'PUT', body: JSON.stringify(body) }).catch(() => {});
 }
 
-/* قائمة المشاهدين الآن — متاحة للجميع */
+/* قائمة المشاهدين الآن — متاحة للجميع
+   المخوَّلون (الحكم/المالك) يرون أزرار الكتم داخلها؛ المشاهد العادي يرى الأسماء فقط */
 async function openViewersList() {
   if (!chatShareId) return;
   const overlay = document.getElementById('viewersOverlay');
   const list = document.getElementById('viewersList');
   list.innerHTML = '<div class="mod-empty">جارِ التحميل...</div>';
   overlay.classList.remove('hidden');
+
+  const privileged = chatIsJudge || isOwner();
   try {
     const res = await fetch(`${DB_BASE}/boards/${chatShareId}/viewers.json?t=` + Date.now(), { cache: 'no-store' });
     const data = res.ok ? await res.json() : null;
+
+    // خريطة الكتم — للمخوَّلين فقط
+    let mutedMap = {};
+    if (privileged) {
+      try {
+        const mres = await fetch(`${DB_BASE}/boards/${chatShareId}/muted.json?t=` + Date.now(), { cache: 'no-store' });
+        if (mres.ok) mutedMap = (await mres.json()) || {};
+      } catch (_) {}
+    }
+
     list.innerHTML = '';
     if (!data || typeof data !== 'object') {
       list.innerHTML = '<div class="mod-empty">لا يوجد مشاهدون الآن.</div>';
@@ -1759,30 +1841,79 @@ async function openViewersList() {
       list.innerHTML = '<div class="mod-empty">لا يوجد مشاهدون الآن.</div>';
       return;
     }
-    // الحكم أولاً ثم المالك ثم البقية
+    // الحكم أولاً ثم البقية
     fresh.sort((a, b) => (b.j ? 1 : 0) - (a.j ? 1 : 0));
+
     for (const e of fresh) {
       const row = document.createElement('div');
       row.className = 'mod-row';
+
+      // يسار الاسم (في RTL): الأفتار أولاً
+      const avEl = document.createElement('span');
+      avEl.className = 'list-av';
+      avEl.innerHTML = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.6"/><path d="M5 20v-1a5.5 5.5 0 0 1 5.5-5.5h3A5.5 5.5 0 0 1 19 19v1"/></svg>';
+      if (e.uid) fillAvatar(avEl, e.uid);
+
       const nameEl = document.createElement('span');
       nameEl.className = 'mod-name';
       if (e.uid === ADMIN_UID) {
-        nameEl.textContent = e.n + ' ( المالك )';
+        nameEl.textContent = '👑 ' + e.n + ' ( المالك )';
         nameEl.classList.add('viewer-row-owner');
       } else if (e.j) {
-        nameEl.textContent = '👑 الحكم : ' + e.n;
+        nameEl.textContent = '⚖️ الحكم : ' + e.n;
         nameEl.classList.add('viewer-row-judge');
       } else {
         nameEl.textContent = e.n;
       }
-      row.appendChild(nameEl);
+
+      const main = document.createElement('span');
+      main.className = 'viewer-row-main';
+      main.appendChild(avEl);
+      main.appendChild(nameEl);
       if (e.uid) {
-        row.style.cursor = 'pointer';
-        row.addEventListener('click', () => {
+        main.style.cursor = 'pointer';
+        main.addEventListener('click', () => {
           overlay.classList.add('hidden');
           openUserSheet(e.uid, e.n);
         });
       }
+      row.appendChild(main);
+
+      // زر الكتم — للمخوَّلين، ولا يظهر على: نفسك، المالك، أو الحكم (إلا للمالك)
+      const canMute = privileged && e.uid &&
+                      e.uid !== chatUid() &&
+                      e.uid !== ADMIN_UID &&
+                      (!e.j || isOwner());
+      if (canMute) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        let mutedVal = mutedMap[e.uid];
+        let isMuted = !!mutedVal;
+        const paint = () => {
+          btn.className = 'mod-btn' + (isMuted ? ' muted' : '');
+          btn.textContent = isMuted ? 'فك الكتم' : 'كتم';
+        };
+        paint();
+        btn.addEventListener('click', async (ev) => {
+          ev.stopPropagation();
+          try {
+            if (isMuted) {
+              await fetch(`${DB_BASE}/boards/${chatShareId}/muted/${e.uid}.json`, { method: 'DELETE' });
+            } else {
+              // نسجّل من قام بالكتم: المالك أم الحكم — لتظهر الرسالة الصحيحة للمكتوم
+              const by = isOwner() ? 'o' : 'j';
+              await fetch(`${DB_BASE}/boards/${chatShareId}/muted/${e.uid}.json`, {
+                method: 'PUT',
+                body: JSON.stringify({ b: by })
+              });
+            }
+            isMuted = !isMuted;
+            paint();
+          } catch (_) { showToast('تعذر التنفيذ — تحقق من الشبكة'); }
+        });
+        row.appendChild(btn);
+      }
+
       list.appendChild(row);
     }
   } catch (_) { list.innerHTML = '<div class="mod-empty">تعذر التحميل</div>'; }
@@ -1808,8 +1939,7 @@ function startChat(shareId, isJudge) {
   chatLastJson = '';
   chatMuted = false;
 
-  const modBtn = document.getElementById('chatModBtn');
-  if (modBtn) modBtn.classList.toggle('hidden', !(isJudge || isOwner()));
+  // (زر الإدارة أُدمج في قائمة "المشاهدون الآن")
 
   setChatVisible(chatPreferredVisible());
   layoutChatPosition();
@@ -1833,6 +1963,7 @@ function stopChat() {
   chatShareId = null;
   clearInterval(chatTimer);
   clearInterval(chatBeatTimer);
+  hideChatNotices();
   const root = document.getElementById('chatRoot');
   const showBtn = document.getElementById('chatShowBtn');
   if (root) root.classList.add('hidden');
@@ -1844,9 +1975,6 @@ function bindChatEvents() {
   const sendBtn = document.getElementById('chatSendBtn');
   const hideBtn = document.getElementById('chatHideBtn');
   const showBtn = document.getElementById('chatShowBtn');
-  const modBtn  = document.getElementById('chatModBtn');
-  const modClose = document.getElementById('modCloseBtn');
-  const modOverlay = document.getElementById('modOverlay');
 
   sendBtn.addEventListener('click', sendChatMessage);
   input.addEventListener('keydown', (e) => {
@@ -1854,13 +1982,10 @@ function bindChatEvents() {
   });
   hideBtn.addEventListener('click', () => setChatVisible(false));
   showBtn.addEventListener('click', () => setChatVisible(true));
-  modBtn.addEventListener('click', openModList);
-  modClose.addEventListener('click', () => modOverlay.classList.add('hidden'));
-  modOverlay.addEventListener('click', (e) => {
-    if (e.target === modOverlay) modOverlay.classList.add('hidden');
-  });
+  // كبسولة "@تم ذكرك" — الضغط ينزلق بالمحادثة للرسالة المقصودة
+  document.getElementById('mentionPill').addEventListener('click', scrollToMention);
 
-  // قائمة المشاهدين الآن (للجميع)
+  // قائمة المشاهدين الآن (للجميع — والمخوَّلون يرون أزرار الكتم داخلها)
   const viewersOverlay = document.getElementById('viewersOverlay');
   document.getElementById('viewersBtn').addEventListener('click', openViewersList);
   document.getElementById('viewersCloseBtn').addEventListener('click', () => viewersOverlay.classList.add('hidden'));
@@ -2232,6 +2357,7 @@ async function saveUserEdit() {
 
 /* ============ النافذة السفلية (بطاقة مستخدم الدردشة) ============ */
 let sheetUid = null;
+let sheetNameText = '';
 
 async function openUserSheet(uid, fallbackName) {
   if (!uid) return;
@@ -2243,7 +2369,11 @@ async function openUserSheet(uid, fallbackName) {
   const avEl = document.getElementById('sheetAvatar');
 
   nameEl.textContent = fallbackName || 'مستخدم';
+  sheetNameText = fallbackName || 'مستخدم';
   userEl.textContent = '';
+  // زر الرد يظهر فقط أثناء دردشة نشطة وليس على نفسك
+  const replyBtn = document.getElementById('sheetReplyBtn');
+  replyBtn.classList.toggle('hidden', !chatShareId || uid === chatUid());
   avEl.innerHTML = '<svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.6"/><path d="M5 20v-1a5.5 5.5 0 0 1 5.5-5.5h3A5.5 5.5 0 0 1 19 19v1"/></svg>';
 
   backdrop.classList.remove('hidden');
@@ -2255,7 +2385,7 @@ async function openUserSheet(uid, fallbackName) {
   const p = profilesCache[uid] || await fetchProfile(uid);
   if (sheetUid !== uid) return;
   if (p) {
-    if (p.name) nameEl.textContent = p.name;
+    if (p.name) { nameEl.textContent = p.name; sheetNameText = p.name; }
     if (p.username) userEl.textContent = '@' + p.username;
     if (p.avatar) {
       avEl.innerHTML = '';
@@ -2699,6 +2829,7 @@ function bindProfileEvents() {
   document.getElementById('profileBackBtn').addEventListener('click', () => {
     closeSubScreensAll();
     el.listScreen.classList.remove('hidden');
+    ensureChatAlive();
   });
 
   // الأفتار
@@ -2764,6 +2895,16 @@ function bindProfileEvents() {
   document.getElementById('sheetBackdrop').addEventListener('click', () => closeUserSheet());
   document.getElementById('sheetName').addEventListener('click', () => {
     if (sheetUid) openProfileScreen(sheetUid);
+  });
+  // الرد عليه: منشن جاهز في حقل الدردشة (بدون فتح الكيبورد — المستخدم يلمس الحقل بنفسه)
+  document.getElementById('sheetReplyBtn').addEventListener('click', () => {
+    if (!sheetUid || !chatShareId) return;
+    const p = profilesCache[sheetUid];
+    const mention = '@' + ((p && p.username) ? p.username : sheetNameText);
+    closeUserSheet();
+    setChatVisible(true);
+    const input = document.getElementById('chatInput');
+    if (input && !input.disabled) input.value = mention + ' ';
   });
   bindSheetDrag();
 }
