@@ -11,7 +11,7 @@
    - شاشة فوز بنظام الإقرار + زر "الفائز" اليدوي
    ==================================================================== */
 
-const APP_VERSION    = 30;             // يجب أن يطابق version.json و ?v= في index.html
+const APP_VERSION    = 31;             // يجب أن يطابق version.json و ?v= في index.html
 const PLAYERS_COUNT  = 10;
 const STORAGE_KEY    = 'madagish.v1';
 const REFRESH_MS     = 3000;
@@ -1627,12 +1627,19 @@ function renderChatFeed(data) {
       if (uid) fillAvatar(avEl, uid);
       row.appendChild(avEl);
 
+      // وسم "بدون يوزر" — يلي الأفتار مباشرة يساراً
+      const usEl = document.createElement('span');
+      usEl.className = 'chat-nouser';
+      fillNoUserBadge(usEl, uid);
+      row.appendChild(usEl);
+
       const nEl = document.createElement('span');
       const isOwnerMsg = uid === ADMIN_UID;
       nEl.className = 'chat-name' + (m.j === 1 ? ' judge' : '') + (isOwnerMsg ? ' owner' : '');
       let label;
-      if (isOwnerMsg) label = '👑 ' + (name || 'المالك') + ' ( المالك )';   // شارة التاج للمالك
-      else if (m.j === 1) label = '⚖️ الحكم';                               // ميزان العدل للحكم
+      // الترتيب البصري: الشارة ← الرتبة ← الاسم على يسارها
+      if (isOwnerMsg) label = '👑 ( المالك ) ' + (name || '');
+      else if (m.j === 1) label = '⚖️ الحكم';
       else label = name || 'مشاهد';
       nEl.textContent = label + ' -';
       // الضغط على الاسم يفتح بطاقة المستخدم (Bottom Sheet)
@@ -1753,6 +1760,23 @@ function bindChatLayout() {
   }
 }
 
+/* وسم "بدون يوزر" — يظهر لمن لم ينشئ يوزراً (كسول + كاش) */
+function fillNoUserBadge(el2, uid) {
+  const apply = (prof) => {
+    el2.textContent = (prof && prof.username) ? '' : 'بدون يوزر';
+    el2.style.display = (prof && prof.username) ? 'none' : '';
+  };
+  if (!uid) { el2.textContent = 'بدون يوزر'; return; }
+  const p = profilesCache[uid];
+  if (p !== undefined && p !== null) { apply(p); return; }
+  fetchProfile(uid).then(apply).catch(() => { apply(null); });
+}
+
+/* المستخدم الموثّق: حساب (إيميل + كلمة مرور) + يوزر محجوز */
+function isVerifiedMe() {
+  return !!getAuthEmail() && !!(myProfile && myProfile.username);
+}
+
 /* تعبئة أفتار عنصر من ملف صاحبه (كسول + كاش) */
 function fillAvatar(el2, uid) {
   const p = profilesCache[uid];
@@ -1854,10 +1878,16 @@ async function openViewersList() {
       avEl.innerHTML = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.6"/><path d="M5 20v-1a5.5 5.5 0 0 1 5.5-5.5h3A5.5 5.5 0 0 1 19 19v1"/></svg>';
       if (e.uid) fillAvatar(avEl, e.uid);
 
+      // وسم "بدون يوزر" بعد الأفتار
+      const usEl = document.createElement('span');
+      usEl.className = 'list-nouser';
+      fillNoUserBadge(usEl, e.uid);
+
       const nameEl = document.createElement('span');
       nameEl.className = 'mod-name';
+      // الترتيب: الشارة ← الرتبة ← الاسم يسارها
       if (e.uid === ADMIN_UID) {
-        nameEl.textContent = '👑 ' + e.n + ' ( المالك )';
+        nameEl.textContent = '👑 ( المالك ) ' + e.n;
         nameEl.classList.add('viewer-row-owner');
       } else if (e.j) {
         nameEl.textContent = '⚖️ الحكم : ' + e.n;
@@ -1869,6 +1899,7 @@ async function openViewersList() {
       const main = document.createElement('span');
       main.className = 'viewer-row-main';
       main.appendChild(avEl);
+      main.appendChild(usEl);
       main.appendChild(nameEl);
       if (e.uid) {
         main.style.cursor = 'pointer';
@@ -2131,8 +2162,18 @@ function renderProfileScreen(uid, p) {
   bioCount.classList.toggle('hidden', !profileIsMine);
   bioView.classList.toggle('hidden', profileIsMine);
   if (profileIsMine) {
-    bioEdit.value = bio;
-    bioCount.textContent = bio.length + '/1000';
+    // النبذة والصورة مزايا موثَّقين فقط (حساب + يوزر)
+    const verified = isVerifiedMe();
+    bioEdit.disabled = !verified;
+    if (verified) {
+      bioEdit.value = bio;
+      bioEdit.placeholder = 'اكتب نبذة عنك...';
+      bioCount.textContent = bio.length + '/1000';
+    } else {
+      bioEdit.value = '';
+      bioEdit.placeholder = '🔒 النبذة متاحة بعد توثيق حسابك ( إيميل + كلمة مرور + يوزر )';
+      bioCount.classList.add('hidden');
+    }
   } else {
     bioView.textContent = bio || '—';
   }
@@ -2384,15 +2425,20 @@ async function openUserSheet(uid, fallbackName) {
 
   const p = profilesCache[uid] || await fetchProfile(uid);
   if (sheetUid !== uid) return;
-  if (p) {
+  userEl.classList.remove('noprofile');
+  if (p && p.username) {
     if (p.name) { nameEl.textContent = p.name; sheetNameText = p.name; }
-    if (p.username) userEl.textContent = '@' + p.username;
+    userEl.textContent = '@' + p.username;
     if (p.avatar) {
       avEl.innerHTML = '';
       const img = document.createElement('img');
       img.src = p.avatar; img.alt = '';
       avEl.appendChild(img);
     }
+  } else {
+    if (p && p.name) { nameEl.textContent = p.name; sheetNameText = p.name; }
+    userEl.classList.add('noprofile');
+    userEl.textContent = 'هذا الشخص لم يقم بإنشاء ملف شخصي خاص به، وليس لديه يوزر خاص به !';
   }
 }
 
@@ -2835,7 +2881,13 @@ function bindProfileEvents() {
   // الأفتار
   const fileInput = document.getElementById('avatarFile');
   document.getElementById('profileAvatarBtn').addEventListener('click', () => {
-    if (profileIsMine) fileInput.click();
+    if (!profileIsMine) return;
+    // رفع الصورة ميزة موثَّقين فقط
+    if (!isVerifiedMe()) {
+      showToast('🔒 وثّق حسابك ( إيميل + كلمة مرور + يوزر ) لتفعيل الصورة والنبذة');
+      return;
+    }
+    fileInput.click();
   });
   fileInput.addEventListener('change', () => {
     if (fileInput.files && fileInput.files[0]) handleAvatarFile(fileInput.files[0]);
