@@ -11,7 +11,7 @@
    - شاشة فوز بنظام الإقرار + زر "الفائز" اليدوي
    ==================================================================== */
 
-const APP_VERSION    = 31;             // يجب أن يطابق version.json و ?v= في index.html
+const APP_VERSION    = 33;             // يجب أن يطابق version.json و ?v= في index.html
 const PLAYERS_COUNT  = 10;
 const STORAGE_KEY    = 'madagish.v1';
 const REFRESH_MS     = 3000;
@@ -968,6 +968,23 @@ function showPromptModal(opts) {
   else { inp.removeAttribute('readonly'); inp.style.direction = ''; inp.style.fontSize = '18px'; }
   inp.value = opts.initial || '';
   inp.placeholder = opts.placeholder || '';
+  if (opts.maxLength) inp.setAttribute('maxlength', String(opts.maxLength));
+  else inp.removeAttribute('maxlength');
+
+  // عدّاد حروف اختياري (مثال: 0/200)
+  let counter = document.getElementById('confirmInlineCounter');
+  if (counter) counter.remove();
+  if (opts.counterMax) {
+    counter = document.createElement('div');
+    counter.id = 'confirmInlineCounter';
+    counter.className = 'confirm-counter';
+    counter.textContent = (inp.value.length) + '/' + opts.counterMax;
+    inp.insertAdjacentElement('afterend', counter);
+    inp.addEventListener('input', function onc() {
+      const c = document.getElementById('confirmInlineCounter');
+      if (c) c.textContent = inp.value.length + '/' + opts.counterMax;
+    });
+  }
 
   confirmMandatory = !!opts.mandatory;
   el.confirmCancel.classList.toggle('hidden', confirmMandatory);
@@ -990,6 +1007,8 @@ function closeConfirm() {
   el.confirmOverlay.setAttribute('aria-hidden', 'true');
   const inp = document.getElementById('confirmInlineInput');
   if (inp) inp.remove();
+  const cnt = document.getElementById('confirmInlineCounter');
+  if (cnt) cnt.remove();
 }
 
 function runConfirmAction() {
@@ -1407,10 +1426,19 @@ function startViewerMode() {
   viewerPollTimer = setInterval(viewerPoll, SHARE_POLL_MS);
   startShareViewersLoop();
 
-  // اللقب الإجباري ثم الدردشة (نبضة الهوية تبدأ داخل startChat) + إشعار الانضمام
+  // الحضور يبدأ فور فتح الرابط — قبل اللقب وقبل أي كتابة:
+  // أي مشاهد موجود يظهر في "المشاهدون الآن" حتى لو لم يكتب حرفاً
+  chatShareId = VIEW_SHARE_ID;
+  chatIsJudge = false;
+  chatHeartbeat();
+  clearInterval(chatBeatTimer);
+  chatBeatTimer = setInterval(chatHeartbeat, SHARE_VIEWERS_MS);
+
+  // اللقب الإجباري ثم الدردشة + إشعار الانضمام
   ensureNick((nick) => {
     startChat(VIEW_SHARE_ID, false);
     postJoinNotice(nick);
+    chatHeartbeat();   // نبضة فورية باسمه الجديد
   });
 
   window.addEventListener('pagehide', () => {
@@ -1425,7 +1453,10 @@ function startViewerMode() {
    ==================================================================== */
 const CHAT_POLL_MS  = 2500;
 const CHAT_RATE_MS  = 2000;    // رسالة كل ثانيتين كحد أقصى
-const CHAT_FETCH_N  = 30;      // آخر 30 رسالة
+const CHAT_FETCH_N  = 4;       // الداخل الجديد يرى آخر 4 رسائل فقط (تخفيف التحميل)
+const CHAT_STORE_MAX = 100;    // الرسائل المتراكمة أثناء الجلسة (محلياً)
+
+let chatStore = {};            // تراكم الرسائل محلياً: القديم يبقى والجديد يُضاف
 
 let chatShareId   = null;
 let chatIsJudge   = false;
@@ -1666,7 +1697,16 @@ async function pollChat() {
     const txt = await res.text();
     if (txt !== chatLastJson) {
       chatLastJson = txt;
-      renderChatFeed(JSON.parse(txt));
+      // دمج الدفعة الصغيرة (آخر 4) في المخزون المحلي — الجلسة تتراكم طبيعياً
+      const batch = JSON.parse(txt);
+      if (batch && typeof batch === 'object') {
+        Object.assign(chatStore, batch);
+        const ks = Object.keys(chatStore).sort();
+        if (ks.length > CHAT_STORE_MAX) {
+          for (const old of ks.slice(0, ks.length - CHAT_STORE_MAX)) delete chatStore[old];
+        }
+      }
+      renderChatFeed(chatStore);
     }
     // حالة الكتم — تسري على الجميع بمن فيهم الحكم؛ المالك وحده محصّن
     if (!isOwner()) {
@@ -1968,6 +2008,7 @@ function startChat(shareId, isJudge) {
   chatShareId = shareId;
   chatIsJudge = isJudge;
   chatLastJson = '';
+  chatStore = {};
   chatMuted = false;
 
   // (زر الإدارة أُدمج في قائمة "المشاهدون الآن")
@@ -2415,6 +2456,9 @@ async function openUserSheet(uid, fallbackName) {
   // زر الرد يظهر فقط أثناء دردشة نشطة وليس على نفسك
   const replyBtn = document.getElementById('sheetReplyBtn');
   replyBtn.classList.toggle('hidden', !chatShareId || uid === chatUid());
+  // زر الإبلاغ: ليس على نفسك (والمالك لا يحتاجه)
+  const repBtn = document.getElementById('sheetReportBtn');
+  repBtn.classList.toggle('hidden', uid === chatUid() || isOwner());
   avEl.innerHTML = '<svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.6"/><path d="M5 20v-1a5.5 5.5 0 0 1 5.5-5.5h3A5.5 5.5 0 0 1 19 19v1"/></svg>';
 
   backdrop.classList.remove('hidden');
@@ -2528,25 +2572,35 @@ async function refreshAdminReportsCount(uid) {
   } catch (_) { line.textContent = 'عدد البلاغات : —'; }
 }
 
-function doReportUser() {
-  const target = profileViewUid;
+/* تدفق الإبلاغ الموحّد (من الملف الشخصي أو بطاقة الدردشة) — مع حقل السبب 0/200 */
+function reportUserFlow(target) {
   if (!target || target === chatUid()) return;
-  showConfirm({
-    title: 'إبلاغ عن المُستخدم',
-    body:  'سيصل بلاغك للإدارة وسيتم التحقق يدوياً. المتابعة؟',
-    okText: 'نعم، أبلغ',
-    danger: true,
-    onOk: async () => {
+  showPromptModal({
+    title: 'إبلاغ عن المُستخدم 🚩',
+    body:  'سيصل بلاغك للإدارة وسيتم التحقق يدوياً.',
+    okText: 'إرسال البلاغ',
+    inputType: 'text',
+    placeholder: 'اذكر السبب',
+    maxLength: 200,
+    counterMax: 200,
+    onOk: async (reason) => {
       try {
         // كل مُبلّغ يُحسب مرة واحدة لكل مستخدم — مقاوم للسبام
+        const body = { ts: { '.sv': 'timestamp' } };
+        const r = (reason || '').trim().slice(0, 200);
+        if (r) body.r = r;
         await fetch(`${DB_BASE}/reports/${target}/${chatUid()}.json`, {
           method: 'PUT',
-          body: JSON.stringify({ ts: { '.sv': 'timestamp' } })
+          body: JSON.stringify(body)
         });
         showToast('وصل بلاغك للإدارة ✓');
       } catch (_) { showToast('تعذر الإرسال — تحقق من الشبكة'); }
     }
   });
+}
+
+function doReportUser() {
+  reportUserFlow(profileViewUid);
 }
 
 function adminToggleSuspend() {
@@ -2881,7 +2935,15 @@ function bindProfileEvents() {
   // الأفتار
   const fileInput = document.getElementById('avatarFile');
   document.getElementById('profileAvatarBtn').addEventListener('click', () => {
-    if (!profileIsMine) return;
+    if (!profileIsMine) {
+      // زائر يضغط أفتار صاحب الملف: عرض الصورة بحجم طبيعي
+      const p = profilesCache[profileViewUid];
+      if (p && p.avatar) {
+        document.getElementById('imgViewerImg').src = p.avatar;
+        document.getElementById('imgViewer').classList.remove('hidden');
+      }
+      return;
+    }
     // رفع الصورة ميزة موثَّقين فقط
     if (!isVerifiedMe()) {
       showToast('🔒 وثّق حسابك ( إيميل + كلمة مرور + يوزر ) لتفعيل الصورة والنبذة');
@@ -2958,7 +3020,18 @@ function bindProfileEvents() {
     const input = document.getElementById('chatInput');
     if (input && !input.disabled) input.value = mention + ' ';
   });
+  // إبلاغ من البطاقة مباشرة
+  document.getElementById('sheetReportBtn').addEventListener('click', () => {
+    const target = sheetUid;
+    closeUserSheet();
+    reportUserFlow(target);
+  });
   bindSheetDrag();
+
+  // عارض الصورة: يُغلق بلمسة في أي مكان
+  document.getElementById('imgViewer').addEventListener('click', () => {
+    document.getElementById('imgViewer').classList.add('hidden');
+  });
 }
 
 /* ============ عدّاد المتصلين الآن (Firebase REST — بدون مكتبات) ============ */
