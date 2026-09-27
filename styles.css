@@ -629,6 +629,387 @@ body.viewer-mode .winner-amount-input {
   padding: 14px 0;
 }
 
+/* ======= أفتار زر "أنت" في الشريط ======= */
+.bar-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #e5e7eb;
+  color: #6b7280;
+  overflow: hidden;
+}
+.bar-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* ======= صفحة الملف الشخصي ======= */
+.profile-head {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 8px 0 4px;
+}
+
+.profile-avatar {
+  position: relative;
+  flex: 0 0 88px;
+  width: 88px;
+  height: 88px;
+  border-radius: 50%;
+  background: #eef1f4;
+  color: #9ca3af;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: visible;
+  border: 2px solid #e5e7eb;
+}
+.profile-avatar-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+}
+.profile-avatar-cam {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--winner-green);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #fff;
+}
+
+.profile-id { min-width: 0; flex: 1; }
+.profile-name-row, .profile-user-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.profile-name {
+  font-size: 20px;
+  font-weight: 800;
+  color: #111;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.profile-user {
+  font-size: 14px;
+  font-weight: 700;
+  color: #6b7280;
+  direction: ltr;
+  unicode-bidi: embed;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.pencil-btn {
+  flex: 0 0 30px;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: #f3f4f6;
+  color: #374151;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.pencil-btn:active { background: #e5e7eb; }
+
+.profile-bio-label {
+  font-size: 15px;
+  font-weight: 800;
+  margin: 12px 0 4px;
+  text-align: right;
+}
+.profile-bio-edit {
+  width: 100%;
+  min-height: 120px;
+  resize: vertical;
+  border: 1.5px solid #d1d5db;
+  border-radius: 12px;
+  padding: 12px;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.8;
+  outline: none;
+  box-sizing: border-box;
+}
+.profile-bio-edit:focus { border-color: var(--winner-green); }
+.profile-bio-count {
+  text-align: left;
+  font-size: 11.5px;
+  color: #9ca3af;
+  font-variant-numeric: tabular-nums;
+  direction: ltr;
+}
+.profile-bio-view {
+  font-size: 14px;
+  line-height: 1.9;
+  color: #374151;
+  margin: 0;
+  text-align: right;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ======= قسم حماية الحساب ======= */
+.account-section {
+  border-top: 1px solid #eee;
+  margin-top: 14px;
+  padding-top: 4px;
+}
+.acc-hint {
+  font-size: 12.5px;
+  color: #6b7280;
+  line-height: 1.8;
+  margin: 0 0 8px;
+  text-align: right;
+}
+.acc-input {
+  text-align: left;
+  font-size: 15px;
+  margin: 4px 0;
+}
+.acc-input::placeholder { text-align: right; direction: rtl; font-size: 13px; }
+.acc-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+}
+.acc-forgot {
+  display: block;
+  margin: 10px auto 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: #2563eb;
+  background: transparent;
+  text-decoration: underline;
+}
+.acc-status {
+  font-size: 14px;
+  font-weight: 700;
+  color: #166534;
+  margin: 6px 0;
+  text-align: right;
+  word-break: break-all;
+}
+.acc-email { direction: ltr; unicode-bidi: embed; }
+
+.profile-share-btn {
+  align-self: center;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+  background: #f3f4f6;
+  border: 1px solid #d1d5db;
+  color: #111;
+  font-size: 14px;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 10px 22px;
+}
+.profile-share-btn:active { background: #e5e7eb; }
+
+/* ======= النافذة السفلية (بطاقة مستخدم الدردشة) ======= */
+.sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.35);
+  z-index: 66;
+}
+.user-sheet {
+  position: fixed;
+  right: 0;
+  left: 0;
+  bottom: 0;
+  z-index: 67;
+  background: #ffffff;
+  border-radius: 20px 20px 0 0;
+  box-shadow: 0 -8px 30px rgba(0,0,0,0.25);
+  padding: 0 16px calc(26px + env(safe-area-inset-bottom));
+  transform: translateY(0);
+  transition: transform 0.28s cubic-bezier(0.32, 0.72, 0, 1);
+  touch-action: none;
+}
+.user-sheet.slide-out { transform: translateY(110%); }
+.sheet-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 0 14px;
+  cursor: grab;
+}
+.sheet-grip {
+  width: 42px;
+  height: 5px;
+  border-radius: 999px;
+  background: #d1d5db;
+}
+.sheet-close {
+  position: absolute;
+  top: 10px;
+  left: 12px;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: #f3f4f6;
+  color: #374151;
+  font-size: 14px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.sheet-body {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 4px 0 8px;
+  min-width: 0;
+}
+.sheet-avatar {
+  flex: 0 0 64px;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: #eef1f4;
+  color: #9ca3af;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 2px solid #e5e7eb;
+}
+.sheet-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.sheet-id {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+  max-width: 60%;
+}
+.sheet-name {
+  font-size: 18px;
+  font-weight: 800;
+  color: #111;
+  background: transparent;
+  padding: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: right;
+}
+.sheet-name:active { opacity: 0.6; }
+.sheet-user {
+  font-size: 13px;
+  font-weight: 700;
+  color: #6b7280;
+  direction: ltr;
+  unicode-bidi: embed;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* اسم المرسل في الشات قابل للضغط */
+.chat-msg .chat-name { cursor: pointer; }
+
+/* ======= نوافذ تعديل الاسم/اليوزر ======= */
+.confirm-box { position: relative; }
+.edit-x {
+  position: absolute;
+  top: 10px;
+  left: 12px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #f3f4f6;
+  color: #374151;
+  font-size: 13px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.edit-input {
+  width: 100%;
+  padding: 12px;
+  font-size: 17px;
+  font-weight: 700;
+  border: 2px solid #d1d5db;
+  border-radius: 10px;
+  margin: 10px 0 8px;
+  text-align: center;
+  font-family: inherit;
+  outline: none;
+  box-sizing: border-box;
+}
+.edit-input:focus { border-color: var(--winner-green); }
+.edit-input:disabled { opacity: 0.45; background: #f9fafb; }
+
+.user-field { position: relative; }
+.user-input {
+  direction: ltr;
+  text-align: left;
+  padding-left: 42px;   /* مساحة أيقونة الحالة أقصى اليسار */
+}
+.user-check {
+  position: absolute;
+  top: 50%;
+  left: 12px;
+  transform: translateY(-50%);
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 900;
+  color: #fff;
+}
+.user-check.ok  { background: #22c55e; }
+.user-check.bad { background: #ef4444; }
+
+.edit-hint {
+  font-size: 12.5px;
+  color: #b91c1c;
+  margin: 0 0 8px;
+  text-align: right;
+}
+.edit-cooldown {
+  font-size: 14px;
+  font-weight: 800;
+  color: #dc2626;
+  margin: 0 0 10px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.btn-primary:disabled { opacity: 0.45; pointer-events: none; }
+
 /* ======= صفحة انتهاء المشاركة ======= */
 .ended-screen {
   position: fixed;

@@ -11,7 +11,7 @@
    - شاشة فوز بنظام الإقرار + زر "الفائز" اليدوي
    ==================================================================== */
 
-const APP_VERSION    = 23;             // يجب أن يطابق version.json و ?v= في index.html
+const APP_VERSION    = 25;             // يجب أن يطابق version.json و ?v= في index.html
 const PLAYERS_COUNT  = 10;
 const STORAGE_KEY    = 'madagish.v1';
 const REFRESH_MS     = 3000;
@@ -797,6 +797,8 @@ function closeSubScreens() {
   el.devScreen.setAttribute('aria-hidden', 'true');
   el.roundsScreen.classList.add('hidden');
   el.roundsScreen.setAttribute('aria-hidden', 'true');
+  const ps = document.getElementById('profileScreen');
+  if (ps) ps.classList.add('hidden');
 }
 
 function openDevScreen() {
@@ -1055,6 +1057,7 @@ function bindEvents() {
   document.getElementById('shareBtn').addEventListener('click', onShareBtnClick);
   bindChatEvents();
   bindChatLayout();
+  bindProfileEvents();
 
   bindOutsideTapDismiss();
 
@@ -1428,7 +1431,7 @@ let chatLastJson  = '';
 let chatMuted     = false;
 let chatParticipants = {};     // uid → آخر اسم معروف (لقائمة الإدارة)
 
-function chatUid() {
+function deviceUid() {
   let id = null;
   try {
     id = localStorage.getItem('madagish.chatUid');
@@ -1438,6 +1441,15 @@ function chatUid() {
     }
   } catch (_) { id = 'u' + Math.random().toString(36).slice(2, 10); }
   return id;
+}
+
+/* الهوية الفعلية: حساب مسجَّل (يتبعك على أي جهاز) وإلا هوية الجهاز */
+function chatUid() {
+  try {
+    const a = localStorage.getItem('madagish.authUid');
+    if (a) return a;
+  } catch (_) {}
+  return deviceUid();
 }
 
 function getNick() {
@@ -1462,6 +1474,7 @@ function ensureNick(onReady) {
       const nick = (val || '').trim().slice(0, 20);
       if (!nick) { ensureNick(onReady); return; }   // إجباري — لا يكمل بدون لقب
       setNick(nick);
+      patchMyProfile({ name: nick });               // اللقب الأول = اسم الملف الشخصي
       onReady(nick);
     }
   });
@@ -1530,6 +1543,8 @@ function renderChatFeed(data) {
       const nEl = document.createElement('span');
       nEl.className = 'chat-name' + (m.j === 1 ? ' judge' : '');
       nEl.textContent = (m.j === 1 ? '👑 الحكم' : (name || 'مشاهد')) + ' -';
+      // الضغط على الاسم يفتح بطاقة المستخدم (Bottom Sheet)
+      if (uid) nEl.addEventListener('click', () => openUserSheet(uid, name || 'مشاهد'));
       const tEl = document.createElement('span');
       tEl.className = 'chat-text';
       tEl.textContent = (typeof m.t === 'string' ? m.t : '').slice(0, 100);
@@ -1607,12 +1622,19 @@ async function openModList() {
     empty.textContent = 'لا يوجد مشاهدون كتبوا في الدردشة بعد.';
     list.appendChild(empty);
   } else {
+    // اجلب اليوزر الثابت لكل مشارك — المزعج الذي يغيّر اسمه لا يفرّ من الحكم
+    const unamePromises = uids.map(async (uid) => {
+      const p = profilesCache[uid] || await fetchProfile(uid);
+      return [uid, p && p.username ? '@' + p.username : ''];
+    });
+    const unames = Object.fromEntries(await Promise.all(unamePromises));
+
     for (const uid of uids) {
       const row = document.createElement('div');
       row.className = 'mod-row';
       const nameEl = document.createElement('span');
       nameEl.className = 'mod-name';
-      nameEl.textContent = chatParticipants[uid];
+      nameEl.textContent = chatParticipants[uid] + (unames[uid] ? ' ( ' + unames[uid] + ' )' : '');
       const btn = document.createElement('button');
       btn.type = 'button';
       let isMuted = mutedMap[uid] === 1;
@@ -1716,6 +1738,629 @@ function bindChatEvents() {
   modOverlay.addEventListener('click', (e) => {
     if (e.target === modOverlay) modOverlay.classList.add('hidden');
   });
+}
+
+/* ====================================================================
+   الملفات الشخصية — "أنت": أفتار + اسم + يوزر فريد + نبذة
+   ==================================================================== */
+const NAME_COOLDOWN_MS = 5 * 60 * 1000;        // تعديل الاسم كل 5 دقائق
+const USER_COOLDOWN_MS = 24 * 60 * 60 * 1000;  // تعديل اليوزر كل 24 ساعة
+const USERNAME_RE = /^[a-z0-9_]{3,15}$/;
+
+let myProfile = null;               // كاش ملفي
+let profilesCache = {};             // uid → ملف (للبطاقات)
+let profileViewUid = null;          // من المعروض حالياً في صفحة الملف
+let profileIsMine = false;
+
+function profileUrl(uid) { return `${DB_BASE}/profiles/${uid}.json`; }
+function usernameUrl(u)  { return `${DB_BASE}/usernames/${u}.json`; }
+
+async function fetchProfile(uid) {
+  try {
+    const res = await fetch(profileUrl(uid) + '?t=' + Date.now(), { cache: 'no-store' });
+    if (!res.ok) return null;
+    const p = await res.json();
+    if (p && typeof p === 'object') { profilesCache[uid] = p; return p; }
+  } catch (_) {}
+  return null;
+}
+
+async function patchMyProfile(fields) {
+  try {
+    await fetch(profileUrl(chatUid()), { method: 'PATCH', body: JSON.stringify(fields) });
+    myProfile = Object.assign(myProfile || {}, fields);
+    profilesCache[chatUid()] = myProfile;
+    return true;
+  } catch (_) { return false; }
+}
+
+/* أفتار الشريط */
+function updateBarAvatar() {
+  const holder = document.getElementById('meBarAvatar');
+  if (!holder) return;
+  if (myProfile && myProfile.avatar) {
+    holder.innerHTML = '';
+    const img = document.createElement('img');
+    img.src = myProfile.avatar;
+    img.alt = '';
+    holder.appendChild(img);
+  }
+}
+
+async function loadMyProfile() {
+  myProfile = await fetchProfile(chatUid());
+  // توحيد: اسم الملف = اسم الشات
+  if (myProfile && typeof myProfile.name === 'string' && myProfile.name.trim()) {
+    setNick(myProfile.name);
+  } else if (getNick()) {
+    // مستخدم قديم عنده لقب فقط — أنشئ له ملفاً بهدوء
+    patchMyProfile({ name: getNick() });
+  }
+  updateBarAvatar();
+}
+
+/* ============ عرض صفحة الملف ============ */
+function renderProfileScreen(uid, p) {
+  profileViewUid = uid;
+  profileIsMine = uid === chatUid();
+  const nameEl = document.getElementById('profileName');
+  const userEl = document.getElementById('profileUser');
+  const img    = document.getElementById('profileAvatarImg');
+  const ph     = document.getElementById('profileAvatarPh');
+  const cam    = document.getElementById('profileAvatarCam');
+  const bioEdit  = document.getElementById('profileBioEdit');
+  const bioCount = document.getElementById('profileBioCount');
+  const bioView  = document.getElementById('profileBioView');
+
+  const name = (p && p.name) || (profileIsMine ? (getNick() || 'بدون اسم') : 'مستخدم');
+  const uname = p && p.username ? '@' + p.username : (profileIsMine ? 'لا يوجد يوزر بعد' : '');
+  const bio = (p && typeof p.bio === 'string') ? p.bio : '';
+
+  nameEl.textContent = name;
+  userEl.textContent = uname;
+
+  if (p && p.avatar) {
+    img.src = p.avatar;
+    img.classList.remove('hidden');
+    ph.classList.add('hidden');
+  } else {
+    img.classList.add('hidden');
+    ph.classList.remove('hidden');
+  }
+
+  document.getElementById('editNameBtn').classList.toggle('hidden', !profileIsMine);
+  document.getElementById('editUserBtn').classList.toggle('hidden', !profileIsMine);
+  cam.classList.toggle('hidden', !profileIsMine);
+  renderAccountSection();
+
+  bioEdit.classList.toggle('hidden', !profileIsMine);
+  bioCount.classList.toggle('hidden', !profileIsMine);
+  bioView.classList.toggle('hidden', profileIsMine);
+  if (profileIsMine) {
+    bioEdit.value = bio;
+    bioCount.textContent = bio.length + '/1000';
+  } else {
+    bioView.textContent = bio || '—';
+  }
+}
+
+async function openProfileScreen(uid) {
+  if (state.winnerShown) return;
+  closeUserSheet(true);
+  closeSubScreensAll();
+  el.listScreen.classList.add('hidden');
+  document.getElementById('profileScreen').classList.remove('hidden');
+  const cached = profilesCache[uid];
+  renderProfileScreen(uid, cached || null);
+  const fresh = await fetchProfile(uid);
+  if (profileViewUid === uid) renderProfileScreen(uid, fresh);
+}
+
+function closeSubScreensAll() { closeSubScreens(); }
+
+/* ============ رفع الأفتار (ضغط تلقائي عبر canvas) ============ */
+function handleAvatarFile(file) {
+  if (!file || !file.type || !file.type.startsWith('image/')) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    const imgObj = new Image();
+    imgObj.onload = async () => {
+      const S = 160;
+      const canvas = document.createElement('canvas');
+      canvas.width = S; canvas.height = S;
+      const ctx = canvas.getContext('2d');
+      // قصّ مربع من المنتصف ثم تصغير — مثل كل منصات التواصل
+      const side = Math.min(imgObj.width, imgObj.height);
+      const sx = (imgObj.width - side) / 2;
+      const sy = (imgObj.height - side) / 2;
+      ctx.drawImage(imgObj, sx, sy, side, side, 0, 0, S, S);
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.78);
+      const ok = await patchMyProfile({ avatar: dataUrl });
+      if (ok) {
+        renderProfileScreen(chatUid(), myProfile);
+        updateBarAvatar();
+        showToast('تم تحديث الصورة ✓');
+      } else {
+        showToast('تعذر رفع الصورة — تحقق من الشبكة');
+      }
+    };
+    imgObj.src = reader.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+/* ============ نافذة تعديل الاسم (عدّاد 5 دقائق) ============ */
+let nameCooldownTimer = null;
+
+function fmtCountdown(ms) {
+  const s = Math.ceil(ms / 1000);
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  return m + ':' + String(r).padStart(2, '0');
+}
+
+function openNameEditor() {
+  const overlay = document.getElementById('nameOverlay');
+  const input = document.getElementById('nameEditInput');
+  const ok = document.getElementById('nameOkBtn');
+  const cd = document.getElementById('nameCooldown');
+  overlay.classList.remove('hidden');
+  input.value = getNick() || '';
+
+  function tick() {
+    let changedAt = 0;
+    try { changedAt = parseInt(localStorage.getItem('madagish.nameChangedAt') || '0', 10); } catch (_) {}
+    const left = changedAt + NAME_COOLDOWN_MS - Date.now();
+    if (left > 0) {
+      input.disabled = true;
+      ok.disabled = true;
+      cd.classList.remove('hidden');
+      cd.textContent = 'يمكنك التعديل بعد : ' + fmtCountdown(left);
+    } else {
+      input.disabled = false;
+      ok.disabled = false;
+      cd.classList.add('hidden');
+    }
+  }
+  tick();
+  clearInterval(nameCooldownTimer);
+  nameCooldownTimer = setInterval(tick, 1000);
+}
+
+function closeNameEditor() {
+  clearInterval(nameCooldownTimer);
+  document.getElementById('nameOverlay').classList.add('hidden');
+}
+
+async function saveNameEdit() {
+  const input = document.getElementById('nameEditInput');
+  const v = (input.value || '').trim().slice(0, 20);
+  if (!v) return;
+  if (v === getNick()) { closeNameEditor(); return; }
+  setNick(v);
+  try { localStorage.setItem('madagish.nameChangedAt', String(Date.now())); } catch (_) {}
+  await patchMyProfile({ name: v });
+  closeNameEditor();
+  renderProfileScreen(chatUid(), myProfile);
+  showToast('تم تغيير الاسم ✓');
+}
+
+/* ============ نافذة اليوزر (فحص إتاحة حي + عدّاد 24 ساعة) ============ */
+let userCooldownTimer = null;
+let userCheckTimer = null;
+let userCheckState = 'idle';   // idle | ok | bad
+
+function setUserCheck(stateName, hint) {
+  const icon = document.getElementById('userCheckIcon');
+  const hintEl = document.getElementById('userHint');
+  const ok = document.getElementById('userOkBtn');
+  userCheckState = stateName;
+  if (stateName === 'ok') {
+    icon.className = 'user-check ok';
+    icon.textContent = '✓';
+    icon.classList.remove('hidden');
+    hintEl.classList.add('hidden');
+    ok.disabled = false;
+  } else if (stateName === 'bad') {
+    icon.className = 'user-check bad';
+    icon.textContent = '✕';
+    icon.classList.remove('hidden');
+    hintEl.textContent = hint || '';
+    hintEl.classList.toggle('hidden', !hint);
+    ok.disabled = true;
+  } else {
+    icon.classList.add('hidden');
+    hintEl.classList.add('hidden');
+    ok.disabled = true;
+  }
+}
+
+async function checkUsernameAvailable(u) {
+  try {
+    const res = await fetch(usernameUrl(u) + '?t=' + Date.now(), { cache: 'no-store' });
+    if (!res.ok) return null;
+    const owner = await res.json();
+    return owner === null || owner === chatUid();
+  } catch (_) { return null; }
+}
+
+function openUserEditor() {
+  const overlay = document.getElementById('userOverlay');
+  const input = document.getElementById('userEditInput');
+  const cd = document.getElementById('userCooldown');
+  overlay.classList.remove('hidden');
+  input.value = (myProfile && myProfile.username) || '';
+  setUserCheck('idle');
+
+  function tick() {
+    let changedAt = 0;
+    try { changedAt = parseInt(localStorage.getItem('madagish.userChangedAt') || '0', 10); } catch (_) {}
+    const left = changedAt + USER_COOLDOWN_MS - Date.now();
+    if (left > 0) {
+      input.disabled = true;
+      document.getElementById('userOkBtn').disabled = true;
+      cd.classList.remove('hidden');
+      const h = Math.floor(left / 3600000);
+      const m = Math.ceil((left % 3600000) / 60000);
+      cd.textContent = 'يمكنك تغيير اليوزر بعد : ' + h + ' ساعة و ' + m + ' دقيقة';
+    } else {
+      input.disabled = false;
+      cd.classList.add('hidden');
+    }
+  }
+  tick();
+  clearInterval(userCooldownTimer);
+  userCooldownTimer = setInterval(tick, 1000);
+}
+
+function closeUserEditor() {
+  clearInterval(userCooldownTimer);
+  clearTimeout(userCheckTimer);
+  document.getElementById('userOverlay').classList.add('hidden');
+}
+
+function onUserInput() {
+  const input = document.getElementById('userEditInput');
+  input.value = input.value.toLowerCase().replace(/[^a-z0-9_]/g, '');
+  const v = input.value;
+  clearTimeout(userCheckTimer);
+  if (v === '') { setUserCheck('idle'); return; }
+  if (!USERNAME_RE.test(v)) {
+    setUserCheck('bad', 'من 3 إلى 15: أحرف إنجليزية صغيرة وأرقام و _ فقط');
+    return;
+  }
+  if (myProfile && myProfile.username === v) {
+    setUserCheck('bad', 'هذا يوزرك الحالي');
+    return;
+  }
+  setUserCheck('idle');
+  userCheckTimer = setTimeout(async () => {
+    const avail = await checkUsernameAvailable(v);
+    if (document.getElementById('userEditInput').value !== v) return;  // تغيّر أثناء الفحص
+    if (avail === true) setUserCheck('ok');
+    else if (avail === false) setUserCheck('bad', 'هذا اليوزر محجوز من مستخدم آخر');
+    else setUserCheck('bad', 'تعذر الفحص — تحقق من الشبكة');
+  }, 400);
+}
+
+async function saveUserEdit() {
+  const v = document.getElementById('userEditInput').value;
+  if (userCheckState !== 'ok' || !USERNAME_RE.test(v)) return;
+  // فحص نهائي ثم حجز
+  const avail = await checkUsernameAvailable(v);
+  if (avail !== true) { setUserCheck('bad', 'سبقك أحد إليه للتو — جرّب غيره'); return; }
+  try {
+    const old = myProfile && myProfile.username;
+    await fetch(usernameUrl(v), { method: 'PUT', body: JSON.stringify(chatUid()) });
+    if (old && old !== v) fetch(usernameUrl(old), { method: 'DELETE' }).catch(() => {});
+    await patchMyProfile({ username: v });
+    try { localStorage.setItem('madagish.userChangedAt', String(Date.now())); } catch (_) {}
+    closeUserEditor();
+    renderProfileScreen(chatUid(), myProfile);
+    showToast('تم حجز اليوزر @' + v + ' ✓');
+  } catch (_) { showToast('تعذر الحفظ — تحقق من الشبكة'); }
+}
+
+/* ============ النافذة السفلية (بطاقة مستخدم الدردشة) ============ */
+let sheetUid = null;
+
+async function openUserSheet(uid, fallbackName) {
+  if (!uid) return;
+  sheetUid = uid;
+  const backdrop = document.getElementById('sheetBackdrop');
+  const sheet = document.getElementById('userSheet');
+  const nameEl = document.getElementById('sheetName');
+  const userEl = document.getElementById('sheetUser');
+  const avEl = document.getElementById('sheetAvatar');
+
+  nameEl.textContent = fallbackName || 'مستخدم';
+  userEl.textContent = '';
+  avEl.innerHTML = '<svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.6"/><path d="M5 20v-1a5.5 5.5 0 0 1 5.5-5.5h3A5.5 5.5 0 0 1 19 19v1"/></svg>';
+
+  backdrop.classList.remove('hidden');
+  sheet.classList.remove('hidden');
+  sheet.classList.add('slide-out');
+  sheet.style.transform = '';
+  requestAnimationFrame(() => requestAnimationFrame(() => sheet.classList.remove('slide-out')));
+
+  const p = profilesCache[uid] || await fetchProfile(uid);
+  if (sheetUid !== uid) return;
+  if (p) {
+    if (p.name) nameEl.textContent = p.name;
+    if (p.username) userEl.textContent = '@' + p.username;
+    if (p.avatar) {
+      avEl.innerHTML = '';
+      const img = document.createElement('img');
+      img.src = p.avatar; img.alt = '';
+      avEl.appendChild(img);
+    }
+  }
+}
+
+function closeUserSheet(instant) {
+  const backdrop = document.getElementById('sheetBackdrop');
+  const sheet = document.getElementById('userSheet');
+  if (sheet.classList.contains('hidden')) return;
+  sheetUid = null;
+  if (instant) {
+    sheet.classList.add('hidden');
+    backdrop.classList.add('hidden');
+    return;
+  }
+  sheet.classList.add('slide-out');
+  backdrop.classList.add('hidden');
+  setTimeout(() => { sheet.classList.add('hidden'); sheet.classList.remove('slide-out'); sheet.style.transform = ''; }, 300);
+}
+
+/* سحب النافذة السفلية بالإصبع للأسفل */
+function bindSheetDrag() {
+  const sheet = document.getElementById('userSheet');
+  const handle = document.getElementById('sheetHandle');
+  let startY = null;
+  let dy = 0;
+
+  function onStart(e) {
+    startY = (e.touches ? e.touches[0].clientY : e.clientY);
+    dy = 0;
+    sheet.style.transition = 'none';
+  }
+  function onMove(e) {
+    if (startY === null) return;
+    const y = (e.touches ? e.touches[0].clientY : e.clientY);
+    dy = Math.max(0, y - startY);
+    sheet.style.transform = 'translateY(' + dy + 'px)';
+  }
+  function onEnd() {
+    if (startY === null) return;
+    sheet.style.transition = '';
+    startY = null;
+    if (dy > 80) {
+      sheet.style.transform = '';
+      closeUserSheet();
+    } else {
+      sheet.style.transform = '';
+    }
+  }
+  handle.addEventListener('touchstart', onStart, { passive: true });
+  handle.addEventListener('touchmove', onMove, { passive: true });
+  handle.addEventListener('touchend', onEnd);
+  handle.addEventListener('mousedown', onStart);
+  window.addEventListener('mousemove', onMove);
+  window.addEventListener('mouseup', onEnd);
+}
+
+/* ============ مشاركة صفحة الملف ============ */
+function profileLink(uid, p) {
+  const base = `${location.origin}${location.pathname}`;
+  if (p && p.username) return `${base}?profile=${p.username}`;
+  return `${base}?profile=u:${uid}`;
+}
+
+/* ============ فتح ملف من رابط ?profile= ============ */
+async function handleProfileParam() {
+  const target = VIEW_PARAMS.get('profile');
+  if (!target) return;
+  let uid = null;
+  if (target.startsWith('u:')) {
+    uid = target.slice(2);
+  } else {
+    try {
+      const res = await fetch(usernameUrl(target.toLowerCase()) + '?t=' + Date.now(), { cache: 'no-store' });
+      if (res.ok) uid = await res.json();
+    } catch (_) {}
+  }
+  if (uid) openProfileScreen(uid);
+}
+
+/* ============ حماية الحساب (Firebase Auth REST) ============ */
+const AUTH_API_KEY = 'AIzaSyDPwG5SXz2v5tbEYF0ayaVzXhT_BEOTpU0';
+const AUTH_BASE = 'https://identitytoolkit.googleapis.com/v1';
+
+function getAuthEmail() {
+  try { return localStorage.getItem('madagish.authEmail') || null; } catch (_) { return null; }
+}
+
+async function authRequest(action, body) {
+  const res = await fetch(`${AUTH_BASE}/accounts:${action}?key=${AUTH_API_KEY}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    const code = (data && data.error && data.error.message) || 'UNKNOWN';
+    throw new Error(code);
+  }
+  return data;
+}
+
+function authErrorAr(code) {
+  if (code.includes('EMAIL_EXISTS')) return 'هذا الإيميل مسجّل من قبل — جرّب تسجيل الدخول';
+  if (code.includes('INVALID_LOGIN_CREDENTIALS') || code.includes('INVALID_PASSWORD')) return 'الإيميل أو كلمة المرور غير صحيحة';
+  if (code.includes('EMAIL_NOT_FOUND')) return 'لا يوجد حساب بهذا الإيميل';
+  if (code.includes('WEAK_PASSWORD')) return 'كلمة المرور ضعيفة — 6 أحرف فأكثر';
+  if (code.includes('INVALID_EMAIL')) return 'صيغة الإيميل غير صحيحة';
+  if (code.includes('TOO_MANY_ATTEMPTS')) return 'محاولات كثيرة — انتظر قليلاً ثم أعد المحاولة';
+  return 'تعذر الاتصال — تحقق من الشبكة';
+}
+
+function accShowError(msg) {
+  const e = document.getElementById('accError');
+  e.textContent = msg;
+  e.classList.toggle('hidden', !msg);
+}
+
+function renderAccountSection() {
+  const section = document.getElementById('accountSection');
+  section.classList.toggle('hidden', !profileIsMine);
+  if (!profileIsMine) return;
+  const email = getAuthEmail();
+  document.getElementById('accSignedOut').classList.toggle('hidden', !!email);
+  document.getElementById('accSignedIn').classList.toggle('hidden', !email);
+  if (email) document.getElementById('accEmailShow').textContent = email;
+  accShowError('');
+}
+
+/* نقل ملف الجهاز إلى الحساب الجديد (مرة واحدة عند الإنشاء) */
+async function migrateDeviceProfileTo(newUid) {
+  const old = deviceUid();
+  if (!old || old === newUid) return;
+  const p = await fetchProfile(old);
+  if (!p) return;
+  const existing = await fetchProfile(newUid);
+  if (existing) return;   // الحساب له ملف بالفعل — لا نلمسه
+  await fetch(profileUrl(newUid), { method: 'PATCH', body: JSON.stringify(p) }).catch(() => {});
+  if (p.username) {
+    await fetch(usernameUrl(p.username), { method: 'PUT', body: JSON.stringify(newUid) }).catch(() => {});
+  }
+}
+
+function finishAuth(email, uid, msg) {
+  try {
+    localStorage.setItem('madagish.authUid', uid);
+    localStorage.setItem('madagish.authEmail', email);
+  } catch (_) {}
+  showToast(msg);
+  setTimeout(() => location.reload(), 1000);   // إعادة تشغيل نظيفة بالهوية الجديدة
+}
+
+async function doSignup() {
+  const email = (document.getElementById('accEmail').value || '').trim();
+  const pass = document.getElementById('accPass').value || '';
+  if (!email || !pass) { accShowError('اكتب الإيميل وكلمة المرور'); return; }
+  accShowError('');
+  try {
+    const d = await authRequest('signUp', { email, password: pass, returnSecureToken: true });
+    await migrateDeviceProfileTo(d.localId);
+    finishAuth(email, d.localId, 'تم إنشاء الحساب ✓');
+  } catch (e) { accShowError(authErrorAr(String(e.message))); }
+}
+
+async function doLogin() {
+  const email = (document.getElementById('accEmail').value || '').trim();
+  const pass = document.getElementById('accPass').value || '';
+  if (!email || !pass) { accShowError('اكتب الإيميل وكلمة المرور'); return; }
+  accShowError('');
+  try {
+    const d = await authRequest('signInWithPassword', { email, password: pass, returnSecureToken: true });
+    await migrateDeviceProfileTo(d.localId);   // لو حسابه بلا ملف وعنده ملف جهاز — ننقله (فحص داخلي)
+    finishAuth(email, d.localId, 'تم تسجيل الدخول ✓');
+  } catch (e) { accShowError(authErrorAr(String(e.message))); }
+}
+
+async function doForgot() {
+  let email = (document.getElementById('accEmail').value || '').trim();
+  if (!email) email = getAuthEmail() || '';
+  if (!email) { accShowError('اكتب إيميلك أولاً في الحقل'); return; }
+  accShowError('');
+  try {
+    await authRequest('sendOobCode', { requestType: 'PASSWORD_RESET', email });
+    showToast('أُرسل رابط تغيير كلمة المرور إلى إيميلك 📧');
+  } catch (e) { accShowError(authErrorAr(String(e.message))); }
+}
+
+function doLogout() {
+  showConfirm({
+    title: 'تسجيل الخروج',
+    body:  'سيعود هذا الجهاز لملفه المحلي. ملفك المسجّل محفوظ وترجع له بتسجيل الدخول متى شئت.',
+    okText: 'خروج',
+    danger: true,
+    onOk: () => {
+      try {
+        localStorage.removeItem('madagish.authUid');
+        localStorage.removeItem('madagish.authEmail');
+      } catch (_) {}
+      showToast('تم تسجيل الخروج');
+      setTimeout(() => location.reload(), 900);
+    }
+  });
+}
+
+/* ============ ربط أحداث الملف الشخصي ============ */
+let bioSaveTimer = null;
+
+function bindProfileEvents() {
+  document.getElementById('meBtn').addEventListener('click', () => openProfileScreen(chatUid()));
+  document.getElementById('profileBackBtn').addEventListener('click', () => {
+    closeSubScreensAll();
+    el.listScreen.classList.remove('hidden');
+  });
+
+  // الأفتار
+  const fileInput = document.getElementById('avatarFile');
+  document.getElementById('profileAvatarBtn').addEventListener('click', () => {
+    if (profileIsMine) fileInput.click();
+  });
+  fileInput.addEventListener('change', () => {
+    if (fileInput.files && fileInput.files[0]) handleAvatarFile(fileInput.files[0]);
+    fileInput.value = '';
+  });
+
+  // تعديل الاسم
+  document.getElementById('editNameBtn').addEventListener('click', openNameEditor);
+  document.getElementById('nameX').addEventListener('click', closeNameEditor);
+  document.getElementById('nameOkBtn').addEventListener('click', saveNameEdit);
+  document.getElementById('nameOverlay').addEventListener('click', (e) => {
+    if (e.target === document.getElementById('nameOverlay')) closeNameEditor();
+  });
+
+  // تعديل اليوزر
+  document.getElementById('editUserBtn').addEventListener('click', openUserEditor);
+  document.getElementById('userX').addEventListener('click', closeUserEditor);
+  document.getElementById('userOkBtn').addEventListener('click', saveUserEdit);
+  document.getElementById('userEditInput').addEventListener('input', onUserInput);
+  document.getElementById('userOverlay').addEventListener('click', (e) => {
+    if (e.target === document.getElementById('userOverlay')) closeUserEditor();
+  });
+
+  // النبذة: حفظ تلقائي أثناء الكتابة (debounce) + عدّاد
+  const bio = document.getElementById('profileBioEdit');
+  bio.addEventListener('input', () => {
+    document.getElementById('profileBioCount').textContent = bio.value.length + '/1000';
+    clearTimeout(bioSaveTimer);
+    bioSaveTimer = setTimeout(() => { patchMyProfile({ bio: bio.value.slice(0, 1000) }); }, 800);
+  });
+
+  // مشاركة الصفحة
+  document.getElementById('profileShareBtn').addEventListener('click', () => {
+    const p = profilesCache[profileViewUid] || (profileIsMine ? myProfile : null);
+    openShareDialog(profileLink(profileViewUid, p));
+  });
+
+  // حماية الحساب
+  document.getElementById('accSignupBtn').addEventListener('click', doSignup);
+  document.getElementById('accLoginBtn').addEventListener('click', doLogin);
+  document.getElementById('accForgotBtn').addEventListener('click', doForgot);
+  document.getElementById('accForgotBtn2').addEventListener('click', doForgot);
+  document.getElementById('accLogoutBtn').addEventListener('click', doLogout);
+
+  // النافذة السفلية
+  document.getElementById('sheetCloseBtn').addEventListener('click', () => closeUserSheet());
+  document.getElementById('sheetBackdrop').addEventListener('click', () => closeUserSheet());
+  document.getElementById('sheetName').addEventListener('click', () => {
+    if (sheetUid) openProfileScreen(sheetUid);
+  });
+  bindSheetDrag();
 }
 
 /* ============ عدّاد المتصلين الآن (Firebase REST — بدون مكتبات) ============ */
@@ -1870,6 +2515,8 @@ function init() {
   startUpdateChecker();
   startPresence();
   recordMonthlyVisit();
+  loadMyProfile();
+  handleProfileParam();
 
   if (VIEWER_MODE) {
     startViewerMode();
