@@ -11,7 +11,7 @@
    - شاشة فوز بنظام الإقرار + زر "الفائز" اليدوي
    ==================================================================== */
 
-const APP_VERSION    = 36;             // يجب أن يطابق version.json و ?v= في index.html
+const APP_VERSION    = 38;             // يجب أن يطابق version.json و ?v= في index.html
 const PLAYERS_COUNT  = 10;
 const STORAGE_KEY    = 'madagish.v1';
 const REFRESH_MS     = 3000;
@@ -1287,7 +1287,7 @@ function startSharing() {
   updateShareBtn();
   startShareViewersLoop();
   startChat(state.shareId, true);
-  openShareDialog();
+  openShareDialog(null, 'judge');   // نص الحكم الخاص
 }
 
 function stopSharing() {
@@ -1313,7 +1313,7 @@ function stopSharing() {
 function onShareBtnClick() {
   if (VIEWER_MODE) {
     // المشاهد: نفس رابط الحكم دائماً، بلا إيقاف
-    openShareDialog(shareLink(VIEW_SHARE_ID));
+    openShareDialog(shareLink(VIEW_SHARE_ID), 'viewer');
     return;
   }
   if (state.shareId) {
@@ -1329,11 +1329,23 @@ function onShareBtnClick() {
   }
 }
 
-function openShareDialog(link) {
+function openShareDialog(link, kind) {
   const url = link || shareLink(state.shareId);
+  const bodies = {
+    // الحكم عند بدء البث
+    judge:
+      'بث الصفحه مباشرة لأصحابك وسيتم تفعيل الشات تلقائياً\n' +
+      'لاتخاف ( انت الحكم ولن يستطيع المُشاهد التحكم بالصفحه )\n' +
+      'وتستطيع الكتم للشخص المُزعج\n' +
+      'انسخ الرابط وأرسله لمن تريدهم ان يشاهدوا نشرتكم وهي حيَّه.',
+    // المشاهد يشارك رابط البث لأصدقائه
+    viewer: 'انسخ الرابط وأرسله لمن تريدهم ان يشاهدوا نشرتكم وهي حيَّه.',
+    // مشاركة صفحة ملف شخصي
+    profile: 'انسخ الرابط وأرسله لمن تريد أن يشاهد هذه الصفحة الشخصية:'
+  };
   showPromptModal({
-    title: 'مشاركة النشرة',
-    body:  'انسخ الرابط وأرسله لمن تريد أن يشاهد النشرة مباشرة:',
+    title: kind === 'profile' ? 'مشاركة الصفحة' : 'مشاركة النشرة',
+    body:  bodies[kind] || bodies.viewer,
     okText: 'نسخ الرابط',
     inputType: 'text',
     initial: url,
@@ -1349,16 +1361,14 @@ function openShareDialog(link) {
 function updateShareBtn() {
   const label = document.getElementById('shareBtnLabel');
   const sub   = document.getElementById('shareViewersCount');
-  if (!label || !sub) return;
-  if (VIEWER_MODE) {
-    label.textContent = 'مشاركة النشرة';
-    sub.classList.remove('hidden');
-  } else if (state.shareId) {
+  if (!label) return;
+  if (sub) sub.classList.add('hidden');   // العدد انتقل لكبسولة العين بجانب الإرسال
+  if (!VIEWER_MODE && state.shareId) {
     label.textContent = 'إيقاف المشاركة';
-    sub.classList.remove('hidden');
+    label.classList.add('share-stop');    // أحمر أثناء المشاركة
   } else {
     label.textContent = 'مشاركة النشرة';
-    sub.classList.add('hidden');
+    label.classList.remove('share-stop');
   }
 }
 
@@ -1382,8 +1392,9 @@ async function refreshShareViewersCount() {
       for (const ts of entries) if (ts > maxTs) maxTs = ts;
       for (const ts of entries) if (maxTs - ts < PRESENCE_FRESH_MS) count++;
     }
-    const sub = document.getElementById('shareViewersCount');
-    if (sub) sub.textContent = `👁 ${count}`;
+    // العدد داخل كبسولة العين بجانب زر الإرسال
+    const badge = document.getElementById('viewersCount');
+    if (badge) badge.textContent = String(count);
   } catch (_) {}
 }
 
@@ -1943,6 +1954,9 @@ async function openViewersList() {
       if (ts > maxTs) maxTs = ts;
     }
     const fresh = entries.filter(e => maxTs - e.ts < PRESENCE_FRESH_MS);
+    // العدد داخل النافذة أيضاً (بجانب العنوان)
+    const ovCount = document.getElementById('viewersOverlayCount');
+    if (ovCount) ovCount.textContent = String(fresh.length);
     if (fresh.length === 0) {
       list.innerHTML = '<div class="mod-empty">لا يوجد مشاهدون الآن.</div>';
       return;
@@ -3028,7 +3042,7 @@ function bindProfileEvents() {
   // مشاركة الصفحة
   document.getElementById('profileShareBtn').addEventListener('click', () => {
     const p = profilesCache[profileViewUid] || (profileIsMine ? myProfile : null);
-    openShareDialog(profileLink(profileViewUid, p));
+    openShareDialog(profileLink(profileViewUid, p), 'profile');
   });
 
   // البلاغ + أدوات المالك + لوحة المالك
