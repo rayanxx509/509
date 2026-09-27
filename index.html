@@ -9,7 +9,7 @@
   <meta name="theme-color" content="#ffffff" />
   <link rel="manifest" href="manifest.json" />
   <link rel="apple-touch-icon" href="icon-192.png" />
-  <link rel="stylesheet" href="styles.css?v=16" />
+  <link rel="stylesheet" href="styles.css?v=17" />
   <title>المداقش — نشرة الحكم</title>
 </head>
 <body>
@@ -114,12 +114,25 @@
       <span class="bar-icon">📋</span>
       <span class="bar-label">الجولات</span>
     </button>
+    <button id="shareBtn" class="bar-item" type="button">
+      <span class="bar-icon">🔗</span>
+      <span id="shareBtnLabel" class="bar-label">مشاركة النشرة</span>
+      <span id="shareViewersCount" class="bar-sub hidden">👁 0</span>
+    </button>
     <div id="onlineCounter" class="bar-item bar-online hidden" aria-live="polite">
       <span class="online-dot"></span>
       <span id="onlineCountText">المتصلون الآن: —</span>
     </div>
     <div class="bar-spacer"></div>
   </nav>
+
+  <!-- صفحة انتهاء المشاركة (للمشاهدين فقط) -->
+  <section id="endedScreen" class="ended-screen hidden" aria-hidden="true">
+    <p class="ended-text">
+      نأسف : الحكم أنهى المُشاركة،<br />
+      يمكنك الآن إقفال الصفحة وانتظار مُشاركة جديدة في وقت لاحق.
+    </p>
+  </section>
 
   <!-- مربع تأكيد المسح -->
   <div id="confirmOverlay" class="overlay hidden" aria-hidden="true">
@@ -133,6 +146,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=16"></script>
+  <script src="app.js?v=17"></script>
 </body>
 </html>

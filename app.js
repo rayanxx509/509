@@ -11,7 +11,7 @@
    - شاشة فوز بنظام الإقرار + زر "الفائز" اليدوي
    ==================================================================== */
 
-const APP_VERSION    = 16;             // يجب أن يطابق version.json و ?v= في index.html
+const APP_VERSION    = 17;             // يجب أن يطابق version.json و ?v= في index.html
 const PLAYERS_COUNT  = 10;
 const STORAGE_KEY    = 'madagish.v1';
 const REFRESH_MS     = 3000;
@@ -22,6 +22,16 @@ const UPDATE_CHECK_MS = 60000;         // فحص التحديثات كل دقي�
 const PRESENCE_DB_URL   = 'https://madagish509-default-rtdb.firebaseio.com';
 const PRESENCE_BEAT_MS  = 10000;       // نبضة "أنا متصل" + قراءة العدد كل 10 ثوان
 const PRESENCE_FRESH_MS = 25000;       // يُعد متصلاً من نبض خلال آخر 25 ثانية
+
+/* مشاركة النشرة (بث مباشر للمشاهدين) */
+const SHARE_POLL_MS       = 2500;      // المشاهد يفحص رقم المراجعة كل 2.5 ثانية
+const SHARE_VIEWERS_MS    = 10000;     // نبضة المشاهد + تحديث عدد المشاهدين كل 10 ثوان
+const SHARE_PUSH_DEBOUNCE = 500;       // الحكم يدفع الحالة بعد نصف ثانية من آخر تعديل
+
+/* وضع المشاهدة: يتحدد من الرابط ?view=ID قبل أي شيء */
+const VIEW_PARAMS  = new URLSearchParams(location.search);
+const VIEWER_MODE  = VIEW_PARAMS.has('view');
+const VIEW_SHARE_ID = VIEWER_MODE ? String(VIEW_PARAMS.get('view')).replace(/[^A-Za-z0-9_-]/g, '') : null;
 
 const COLOR_THRESHOLDS = [
   { min: 70, color: 'green'  },
@@ -45,6 +55,9 @@ const state = {
   capitalSet: false,               // هل أُدخل رأس المال؟ (يتحكم بظهور حقول الرصيد)
   roundsLog: [],                   // دفتر الجولات التوثيقي: {id, idx, name, amount, mark:null|'undo'|'redo'}
   roundsSeq: 0,                    // عدّاد معرفات أسطر الدفتر
+  shareId: null,                   // معرّف المشاركة النشطة (عند الحكم)
+  shareRev: 0,                     // رقم مراجعة يتزايد مع كل دفعة (للمشاهدين)
+  winnerEvent: 0,                  // يتزايد مع كل ظهور لشاشة الفوز (مزامنة انبثاقها عند المشاهدين)
   winnerShown: false,
   currentWinnerIdx: null,
   acknowledgedWinners: new Set()
@@ -161,6 +174,7 @@ function fitAllNameInputs() {
 
 /* ============ التخزين + الترحيل ============ */
 function saveState() {
+  if (VIEWER_MODE) return;   // المشاهد لا يكتب شيئاً — عزل تام عن تخزينة جهازه
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({
       winnerAmount: state.winnerAmount,
@@ -170,12 +184,16 @@ function saveState() {
       capitalSet: state.capitalSet,
       roundsLog: state.roundsLog,
       roundsSeq: state.roundsSeq,
+      shareId: state.shareId,
+      winnerEvent: state.winnerEvent,
       acknowledgedWinners: Array.from(state.acknowledgedWinners)
     }));
   } catch (_) { /* تجاهل */ }
+  schedulePushBoard();       // إن كانت المشاركة نشطة، ادفع الحالة للمشاهدين
 }
 
 function loadState() {
+  if (VIEWER_MODE) return;   // المشاهد يستمد حالته من المشاركة، لا من تخزينة جهازه
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return;
@@ -198,6 +216,8 @@ function loadState() {
     if (typeof data.capitalSet === 'boolean') {
       state.capitalSet = data.capitalSet;
     }
+    if (typeof data.shareId === 'string' && data.shareId) state.shareId = data.shareId;
+    if (typeof data.winnerEvent === 'number') state.winnerEvent = data.winnerEvent;
     if (Array.isArray(data.players)) {
       for (let i = 0; i < PLAYERS_COUNT; i++) {
         const p = data.players[i];
@@ -488,7 +508,8 @@ function renderPlayers() {
     nameInput.dataset.idx = String(i);
     nameInput.dataset.kind = 'name';
     nameInput.value = p.name || '';
-    bindNameInput(nameInput, i);
+    if (VIEWER_MODE) nameInput.setAttribute('readonly', '');
+    else bindNameInput(nameInput, i);
 
     // 2) حقل الرصيد (أقصى اليسار مع زر الخصم)
     const balanceInput = document.createElement('input');
@@ -502,7 +523,8 @@ function renderPlayers() {
     balanceInput.dataset.idx = String(i);
     balanceInput.dataset.kind = 'balance';
     balanceInput.value = balance === null ? '' : formatAmount(balance);
-    bindBalanceInput(balanceInput, i);
+    if (VIEWER_MODE) balanceInput.setAttribute('readonly', '');
+    else bindBalanceInput(balanceInput, i);
 
     // 3) زر الخصم (−) — أقصى اليسار
     const subBtn = document.createElement('button');
@@ -660,6 +682,7 @@ function promptCapital() {
 
 /* ============ الفائز ============ */
 function checkWinner() {
+  if (VIEWER_MODE) return;   // عند المشاهد: شاشة الفوز تُقاد من بث الحكم فقط
   const w = state.winnerAmount;
   if (w === null) return;
   if (state.winnerShown) return;
@@ -752,6 +775,11 @@ function showWinner(idx) {
   el.winnerScreen.setAttribute('aria-hidden', 'false');
   state.winnerShown = true;
   state.currentWinnerIdx = idx;
+  // حدث فوز جديد — يُبثّ للمشاهدين لينبثق عندهم بالتزامن (جهة الحكم فقط)
+  if (!VIEWER_MODE) {
+    state.winnerEvent += 1;
+    saveState();
+  }
   // غمر كامل: إخفاء الشريط السفلي + محاولة ملء الشاشة
   setBottomBarVisible(false);
   tryEnterFullscreen(el.winnerScreen);
@@ -911,7 +939,12 @@ function showPromptModal(opts) {
   if (opts.inputType === 'tel') {
     inp.setAttribute('inputmode', 'numeric');
     inp.setAttribute('pattern', '[0-9]*');
+  } else {
+    inp.removeAttribute('inputmode');
+    inp.removeAttribute('pattern');
   }
+  if (opts.readonly) { inp.setAttribute('readonly', ''); inp.style.direction = 'ltr'; inp.style.fontSize = '13px'; }
+  else { inp.removeAttribute('readonly'); inp.style.direction = ''; inp.style.fontSize = '18px'; }
   inp.value = opts.initial || '';
   inp.placeholder = opts.placeholder || '';
 
@@ -1009,6 +1042,7 @@ function bindEvents() {
   el.roundsBtn.addEventListener('click', openRoundsScreen);
   el.devBackBtn.addEventListener('click', backToList);
   el.roundsBackBtn.addEventListener('click', backToList);
+  document.getElementById('shareBtn').addEventListener('click', onShareBtnClick);
 
   bindOutsideTapDismiss();
 
@@ -1093,6 +1127,267 @@ function startUpdateChecker() {
   });
 }
 
+/* ====================================================================
+   مشاركة النشرة — بث مباشر للمشاهدين (Firebase REST)
+   الحكم يدفع الحالة مع كل تعديل؛ المشاهد يقرأها فقط (قراءة نقية).
+   ==================================================================== */
+const DB_BASE = PRESENCE_DB_URL.replace(/\/+$/, '');
+
+function boardUrl(id, path) {
+  return `${DB_BASE}/boards/${id}/${path}.json`;
+}
+
+function makeShareId() {
+  let s = '';
+  const chars = 'abcdefghjkmnpqrstuvwxyz23456789';
+  for (let i = 0; i < 10; i++) s += chars[Math.floor(Math.random() * chars.length)];
+  return s;
+}
+
+function shareLink(id) {
+  return `${location.origin}${location.pathname}?view=${id}`;
+}
+
+function buildSnapshot() {
+  return {
+    rev: state.shareRev,
+    ended: false,
+    winnerEvent: state.winnerEvent,
+    winnerShown: state.winnerShown,
+    winnerIdx: state.currentWinnerIdx,
+    data: {
+      winnerAmount: state.winnerAmount,
+      players: state.players,
+      capitalSet: state.capitalSet,
+      roundsLog: state.roundsLog
+    }
+  };
+}
+
+/* --- جهة الحكم: دفع الحالة --- */
+let pushTimer = null;
+function schedulePushBoard() {
+  if (VIEWER_MODE || !state.shareId) return;
+  clearTimeout(pushTimer);
+  pushTimer = setTimeout(pushBoard, SHARE_PUSH_DEBOUNCE);
+}
+
+async function pushBoard() {
+  if (VIEWER_MODE || !state.shareId) return;
+  try {
+    state.shareRev += 1;
+    await fetch(boardUrl(state.shareId, 'state'), {
+      method: 'PUT',
+      body: JSON.stringify(buildSnapshot())
+    });
+  } catch (_) { /* أوفلاين — سيُدفع مع التعديل التالي */ }
+}
+
+function startSharing() {
+  state.shareId = makeShareId();
+  state.shareRev = 0;
+  saveState();               // يحفظ + يدفع أول نسخة
+  updateShareBtn();
+  startShareViewersLoop();
+  openShareDialog();
+}
+
+function stopSharing() {
+  const id = state.shareId;
+  state.shareId = null;
+  saveState();
+  updateShareBtn();
+  if (id) {
+    // شاهد التوقف: صفحة إجبارية عند المشاهدين، والرابط يموت للأبد
+    fetch(boardUrl(id, 'state'), {
+      method: 'PUT',
+      body: JSON.stringify({ ended: true, rev: state.shareRev + 1 })
+    }).catch(() => {});
+  }
+}
+
+function onShareBtnClick() {
+  if (VIEWER_MODE) {
+    // المشاهد: نفس رابط الحكم دائماً، بلا إيقاف
+    openShareDialog(shareLink(VIEW_SHARE_ID));
+    return;
+  }
+  if (state.shareId) {
+    showConfirm({
+      title: 'إيقاف المشاركة',
+      body:  'هل تريد إنهاء المشاركة؟ ستظهر للمشاهدين صفحة انتهاء المشاركة فوراً.',
+      okText: 'نعم، أوقف',
+      danger: true,
+      onOk: stopSharing
+    });
+  } else {
+    startSharing();
+  }
+}
+
+function openShareDialog(link) {
+  const url = link || shareLink(state.shareId);
+  showPromptModal({
+    title: 'مشاركة النشرة',
+    body:  'انسخ الرابط وأرسله لمن تريد أن يشاهد النشرة مباشرة:',
+    okText: 'نسخ الرابط',
+    inputType: 'text',
+    initial: url,
+    readonly: true,
+    onOk: async () => {
+      let ok = false;
+      try { await navigator.clipboard.writeText(url); ok = true; } catch (_) {}
+      showToast(ok ? 'تم نسخ الرابط ✓' : url);
+    }
+  });
+}
+
+function updateShareBtn() {
+  const label = document.getElementById('shareBtnLabel');
+  const sub   = document.getElementById('shareViewersCount');
+  if (!label || !sub) return;
+  if (VIEWER_MODE) {
+    label.textContent = 'مشاركة النشرة';
+    sub.classList.remove('hidden');
+  } else if (state.shareId) {
+    label.textContent = 'إيقاف المشاركة';
+    sub.classList.remove('hidden');
+  } else {
+    label.textContent = 'مشاركة النشرة';
+    sub.classList.add('hidden');
+  }
+}
+
+/* --- عدّاد المشاهدين (حكم + مشاهد) --- */
+let shareViewersTimer = null;
+function activeShareIdForViewers() {
+  return VIEWER_MODE ? VIEW_SHARE_ID : state.shareId;
+}
+
+async function refreshShareViewersCount() {
+  const id = activeShareIdForViewers();
+  if (!id) return;
+  try {
+    const res = await fetch(`${DB_BASE}/boards/${id}/viewers.json?t=` + Date.now(), { cache: 'no-store' });
+    if (!res.ok) return;
+    const data = await res.json();
+    let count = 0;
+    if (data && typeof data === 'object') {
+      let maxTs = 0;
+      const entries = Object.keys(data).map(k => (data[k] && typeof data[k].ts === 'number') ? data[k].ts : 0);
+      for (const ts of entries) if (ts > maxTs) maxTs = ts;
+      for (const ts of entries) if (maxTs - ts < PRESENCE_FRESH_MS) count++;
+    }
+    const sub = document.getElementById('shareViewersCount');
+    if (sub) sub.textContent = `👁 ${count}`;
+  } catch (_) {}
+}
+
+function startShareViewersLoop() {
+  clearInterval(shareViewersTimer);
+  shareViewersTimer = setInterval(refreshShareViewersCount, SHARE_VIEWERS_MS);
+  refreshShareViewersCount();
+}
+
+/* --- جهة المشاهد: السحب والمزامنة --- */
+let viewerLastRev = -1;
+let viewerLastEvent = null;
+let viewerPollTimer = null;
+let viewerEnded = false;
+let viewerId = null;
+
+function showEndedScreen() {
+  viewerEnded = true;
+  clearInterval(viewerPollTimer);
+  clearInterval(shareViewersTimer);
+  document.getElementById('endedScreen').classList.remove('hidden');
+  setBottomBarVisible(false);
+  try { el.winnerVideo.pause(); } catch (_) {}
+}
+
+function applySnapshot(snap) {
+  const d = snap.data || {};
+  state.winnerAmount = (typeof d.winnerAmount === 'number') ? d.winnerAmount : null;
+  if (Array.isArray(d.players)) {
+    for (let i = 0; i < PLAYERS_COUNT; i++) {
+      const p = d.players[i];
+      state.players[i].name    = (p && typeof p.name === 'string' && p.name.trim()) ? p.name : null;
+      state.players[i].balance = (p && typeof p.balance === 'number') ? p.balance : null;
+    }
+  }
+  state.capitalSet = !!d.capitalSet;
+  state.roundsLog = Array.isArray(d.roundsLog) ? d.roundsLog : [];
+
+  displayWinnerAmount();
+  renderPlayers();
+  updateManualWinnerBtnState();
+  renderRoundsIfOpen();
+
+  // انبثاق شاشة الفوز بالتزامن مع الحكم (مرة واحدة لكل حدث فوز)
+  const ev = (typeof snap.winnerEvent === 'number') ? snap.winnerEvent : 0;
+  if (viewerLastEvent === null) {
+    viewerLastEvent = ev;
+    if (snap.winnerShown && typeof snap.winnerIdx === 'number' && snap.winnerIdx >= 0) {
+      showWinner(snap.winnerIdx);
+    }
+  } else if (ev > viewerLastEvent) {
+    viewerLastEvent = ev;
+    if (typeof snap.winnerIdx === 'number' && snap.winnerIdx >= 0) {
+      showWinner(snap.winnerIdx);
+    }
+  }
+}
+
+async function viewerPoll() {
+  if (viewerEnded) return;
+  try {
+    const res = await fetch(`${DB_BASE}/boards/${VIEW_SHARE_ID}/state/rev.json?t=` + Date.now(), { cache: 'no-store' });
+    if (!res.ok) return;
+    const rev = await res.json();
+    if (rev === null) { showEndedScreen(); return; }   // الرابط غير موجود أو حُذف
+    if (typeof rev !== 'number' || rev === viewerLastRev) return;
+
+    const full = await fetch(`${DB_BASE}/boards/${VIEW_SHARE_ID}/state.json?t=` + Date.now(), { cache: 'no-store' });
+    if (!full.ok) return;
+    const snap = await full.json();
+    if (!snap || snap.ended === true) { showEndedScreen(); return; }
+    viewerLastRev = rev;
+    applySnapshot(snap);
+  } catch (_) { /* شبكة — أعد المحاولة في الدورة القادمة */ }
+}
+
+function viewerHeartbeat() {
+  if (viewerEnded || !viewerId) return;
+  fetch(`${DB_BASE}/boards/${VIEW_SHARE_ID}/viewers/${viewerId}.json`, {
+    method: 'PUT',
+    body: JSON.stringify({ ts: { '.sv': 'timestamp' } })
+  }).catch(() => {});
+}
+
+function startViewerMode() {
+  document.body.classList.add('viewer-mode');
+
+  try {
+    viewerId = sessionStorage.getItem('madagish.viewerId');
+    if (!viewerId) {
+      viewerId = 'v' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+      sessionStorage.setItem('madagish.viewerId', viewerId);
+    }
+  } catch (_) { viewerId = 'v' + Math.random().toString(36).slice(2, 10); }
+
+  viewerPoll();
+  viewerPollTimer = setInterval(viewerPoll, SHARE_POLL_MS);
+  viewerHeartbeat();
+  setInterval(viewerHeartbeat, SHARE_VIEWERS_MS);
+  startShareViewersLoop();
+
+  window.addEventListener('pagehide', () => {
+    try {
+      fetch(`${DB_BASE}/boards/${VIEW_SHARE_ID}/viewers/${viewerId}.json`, { method: 'DELETE', keepalive: true });
+    } catch (_) {}
+  });
+}
+
 /* ============ عدّاد المتصلين الآن (Firebase REST — بدون مكتبات) ============ */
 function startPresence() {
   if (!PRESENCE_DB_URL) return;   // الميزة معطلة حتى يُضبط الرابط
@@ -1169,10 +1464,19 @@ function startPresence() {
 function init() {
   loadState();
   bindEvents();
-  bindCrossTabSync();
+  if (!VIEWER_MODE) bindCrossTabSync();
   render();
+  updateShareBtn();
   startUpdateChecker();
   startPresence();
+
+  if (VIEWER_MODE) {
+    startViewerMode();
+  } else if (state.shareId) {
+    // استئناف مشاركة نشطة بعد إعادة تحميل صفحة الحكم
+    schedulePushBoard();
+    startShareViewersLoop();
+  }
 }
 
 if (document.readyState === 'loading') {

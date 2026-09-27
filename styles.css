@@ -422,6 +422,46 @@ button.bar-item:active { background: #f3f4f6; }
 
 .bar-spacer { flex: 1; }
 
+.bar-sub {
+  font-size: 10px;
+  font-weight: 800;
+  color: #16A34A;
+  white-space: nowrap;
+}
+
+/* ======= وضع المشاهدة (Viewer): إخفاء لوحة تحكم الحكم ======= */
+body.viewer-mode #resetBtn,
+body.viewer-mode #capitalBtn,
+body.viewer-mode #globalUndoBtn,
+body.viewer-mode #globalRedoBtn,
+body.viewer-mode .subtract-btn {
+  display: none !important;
+}
+body.viewer-mode .player-input,
+body.viewer-mode .winner-amount-input {
+  pointer-events: none;      /* قراءة فقط — لا كيبورد ولا تعديل */
+}
+
+/* ======= صفحة انتهاء المشاركة ======= */
+.ended-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 100;              /* فوق كل شيء بلا استثناء */
+  background: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  text-align: center;
+}
+.ended-text {
+  font-size: 18px;
+  font-weight: 700;
+  color: #374151;
+  line-height: 2.2;
+  margin: 0;
+}
+
 .online-dot {
   width: 9px;
   height: 9px;
