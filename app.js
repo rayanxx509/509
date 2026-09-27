@@ -11,7 +11,7 @@
    - شاشة فوز بنظام الإقرار + زر "الفائز" اليدوي
    ==================================================================== */
 
-const APP_VERSION    = 20;             // يجب أن يطابق version.json و ?v= في index.html
+const APP_VERSION    = 23;             // يجب أن يطابق version.json و ?v= في index.html
 const PLAYERS_COUNT  = 10;
 const STORAGE_KEY    = 'madagish.v1';
 const REFRESH_MS     = 3000;
@@ -807,6 +807,7 @@ function openDevScreen() {
   el.devScreen.setAttribute('aria-hidden', 'false');
   refreshStatsDisplay();
   fetchMonthlyVisits();
+  fetchYearlyUsers();
 }
 
 function openRoundsScreen() {
@@ -1046,6 +1047,7 @@ function bindEvents() {
   el.backBtn.addEventListener('click', hideWinner);
 
   // الشريط السفلي والصفحات الفرعية
+  document.getElementById('homeBtn').addEventListener('click', backToList);
   el.devInfoBtn.addEventListener('click', openDevScreen);
   el.roundsBtn.addEventListener('click', openRoundsScreen);
   el.devBackBtn.addEventListener('click', backToList);
@@ -1527,7 +1529,7 @@ function renderChatFeed(data) {
       row.className = 'chat-msg';
       const nEl = document.createElement('span');
       nEl.className = 'chat-name' + (m.j === 1 ? ' judge' : '');
-      nEl.textContent = m.j === 1 ? '👑 الحكم' : (name || 'مشاهد');
+      nEl.textContent = (m.j === 1 ? '👑 الحكم' : (name || 'مشاهد')) + ' -';
       const tEl = document.createElement('span');
       tEl.className = 'chat-text';
       tEl.textContent = (typeof m.t === 'string' ? m.t : '').slice(0, 100);
@@ -1817,8 +1819,13 @@ function recordMonthlyVisit() {
   const ym = monthKey();
   const flag = 'madagish.visited.' + ym;
   try { if (sessionStorage.getItem(flag)) return; sessionStorage.setItem(flag, '1'); } catch (_) {}
-  // زيادة ذرّية على خادم Firebase — كل جلسة تُحسب مرة واحدة في الشهر
+  // زيادة ذرّية على خادم Firebase — كل جلسة تُحسب مرة واحدة
+  // الشهر +1 والسنة +1 معاً: تصفير الشهر الجديد لا يمس مجموع السنة
   fetch(`${DB_BASE}/stats/visits/${ym}.json`, {
+    method: 'PUT',
+    body: JSON.stringify({ '.sv': { 'increment': 1 } })
+  }).catch(() => {});
+  fetch(`${DB_BASE}/stats/years/${yearKey()}.json`, {
     method: 'PUT',
     body: JSON.stringify({ '.sv': { 'increment': 1 } })
   }).catch(() => {});
@@ -1832,6 +1839,24 @@ async function fetchMonthlyVisits() {
     if (!res.ok) return;
     const n = await res.json();
     el2.textContent = (typeof n === 'number') ? String(n) : '0';
+  } catch (_) {}
+}
+
+/* ============ عدّاد السنة (تراكمي بنفس أسلوب الشهري) ============ */
+function yearKey() {
+  return String(new Date().getFullYear());
+}
+
+async function fetchYearlyUsers() {
+  const numEl = document.getElementById('statYearly');
+  const labEl = document.getElementById('statYearLabel');
+  if (labEl) labEl.textContent = yearKey();
+  if (!numEl) return;
+  try {
+    const res = await fetch(`${DB_BASE}/stats/years/${yearKey()}.json?t=` + Date.now(), { cache: 'no-store' });
+    if (!res.ok) return;
+    const n = await res.json();
+    numEl.textContent = (typeof n === 'number') ? String(n) : '0';
   } catch (_) {}
 }
 

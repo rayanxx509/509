@@ -390,14 +390,18 @@ button {
   border-top: 1px solid #e5e7eb;
   padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
   box-shadow: 0 -2px 10px rgba(0,0,0,0.05);
+  overflow-x: auto;                 /* عند الامتلاء مستقبلاً: تمرير أفقي */
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
 }
+.bottom-bar::-webkit-scrollbar { display: none; }
 
 .bar-item {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 2px;
+  gap: 3px;
   padding: 4px 10px;
   font-size: 10.5px;
   font-weight: 700;
@@ -405,7 +409,13 @@ button {
   background: transparent;
   border-radius: 10px;
   transition: background 0.1s;
+  flex: 0 0 auto;
 }
+/* توسيط آمن مع دعم التمرير عند الامتلاء (margin auto بدل justify-content) */
+.bar-item:first-child { margin-inline-start: auto; }
+.bar-item:last-child  { margin-inline-end: auto; }
+
+.bar-icon svg { display: block; }
 button.bar-item:active { background: #f3f4f6; }
 
 .bar-icon { font-size: 20px; line-height: 1; }
@@ -480,16 +490,30 @@ body.viewer-mode .winner-amount-input {
   line-height: 1.5;
   color: #ffffff;
   text-shadow: 0 1px 2px rgba(0,0,0,0.7);
-  word-break: break-word;
+  /* صف Flex: الاسم ثم النص — عناصر Flex لا تتداخل أبداً على أي متصفح */
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 6px;
+  min-width: 0;
 }
 .chat-msg .chat-name {
   color: rgba(255,255,255,0.62);   /* اسم المرسل رمادي فاتح */
   font-size: 12px;
   font-weight: 600;
-  margin-inline-end: 6px;
+  flex: 0 0 auto;
+  unicode-bidi: isolate;           /* عزل اتجاه الاسم عن النص */
+  white-space: nowrap;
 }
 .chat-msg .chat-name.judge { color: #FFD75E; }      /* الحكم ذهبي */
-.chat-msg .chat-text { font-weight: 600; }
+.chat-msg .chat-text {
+  font-weight: 600;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;         /* الكلمات/الروابط الطويلة تلتف ولا تكسر التصميم */
+  unicode-bidi: plaintext;         /* رسالة إنجليزية تُعرض باتجاهها الصحيح تلقائياً */
+  text-align: start;
+}
 
 .chat-msg.sys {
   background: transparent;
@@ -720,6 +744,11 @@ body.viewer-mode .winner-amount-input {
 }
 .stat-month {
   color: #B45309;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.stat-year {
+  color: #6D28D9;
   font-weight: 800;
   white-space: nowrap;
 }
