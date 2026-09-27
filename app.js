@@ -11,7 +11,7 @@
    - شاشة فوز بنظام الإقرار + زر "الفائز" اليدوي
    ==================================================================== */
 
-const APP_VERSION    = 33;             // يجب أن يطابق version.json و ?v= في index.html
+const APP_VERSION    = 34;             // يجب أن يطابق version.json و ?v= في index.html
 const PLAYERS_COUNT  = 10;
 const STORAGE_KEY    = 'madagish.v1';
 const REFRESH_MS     = 3000;
@@ -3130,10 +3130,20 @@ function monthKey() {
   return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
 }
 
-function recordMonthlyVisit() {
+async function recordMonthlyVisit() {
   if (!PRESENCE_DB_URL) return;
   const ym = monthKey();
-  const flag = 'madagish.visited.' + ym;
+  // "عهد العدّ": رقم تصفير في القاعدة — رفعه يلغي علامات كل الجلسات القديمة
+  // فيبدأ العد من 1 فوراً عند الجميع بعد أي تصفير إداري
+  let epoch = 1;
+  try {
+    const res = await fetch(`${DB_BASE}/stats/epoch.json?t=` + Date.now(), { cache: 'no-store' });
+    if (res.ok) {
+      const e = await res.json();
+      if (typeof e === 'number') epoch = e;
+    }
+  } catch (_) {}
+  const flag = 'madagish.visited.' + epoch + '.' + ym;
   try { if (sessionStorage.getItem(flag)) return; sessionStorage.setItem(flag, '1'); } catch (_) {}
   // زيادة ذرّية على خادم Firebase — كل جلسة تُحسب مرة واحدة
   // الشهر +1 والسنة +1 معاً: تصفير الشهر الجديد لا يمس مجموع السنة
