@@ -567,8 +567,8 @@ button.bar-item:active { background: #f3f4f6; }
 .winner-screen {
   position: fixed;
   inset: 0;
-  z-index: 40;                    /* تحت الشريط السفلي (60) وفوق القائمة */
-  background: #052e16;            /* لون احتياطي حتى يبدأ الفيديو */
+  z-index: 65;                    /* فوق كل شيء بما فيه الشريط السفلي — غمر كامل */
+  background: #000000;            /* أشرطة سوداء حول الفيديو — أسلوب مشغّل الفيديو */
   overflow: hidden;
 }
 
@@ -577,7 +577,7 @@ button.bar-item:active { background: #f3f4f6; }
   inset: 0;
   width: 100%;
   height: 100%;
-  object-fit: cover;              /* يغطي أي شاشة: آيفون، أندرويد، كمبيوتر */
+  object-fit: contain;            /* يحافظ على أبعاد الفيديو بلا تشويه ولا قص — يتوسط أي شاشة */
   object-position: center;
 }
 

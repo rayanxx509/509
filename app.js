@@ -11,7 +11,7 @@
    - شاشة فوز بنظام الإقرار + زر "الفائز" اليدوي
    ==================================================================== */
 
-const APP_VERSION    = 14;             // يجب أن يطابق version.json و ?v= في index.html
+const APP_VERSION    = 16;             // يجب أن يطابق version.json و ?v= في index.html
 const PLAYERS_COUNT  = 10;
 const STORAGE_KEY    = 'madagish.v1';
 const REFRESH_MS     = 3000;
@@ -713,6 +713,35 @@ function updateManualWinnerBtnState() {
   el.showWinnerBtn.disabled = !candidate;
 }
 
+/* ملء الشاشة الحقيقي حيثما يدعمه المتصفح (أندرويد/كمبيوتر) — يفشل بصمت على iOS Safari */
+function tryEnterFullscreen(target) {
+  try {
+    if (target.requestFullscreen) {
+      const p = target.requestFullscreen();
+      if (p && p.catch) p.catch(() => {});
+    } else if (target.webkitRequestFullscreen) {
+      target.webkitRequestFullscreen();
+    }
+  } catch (_) {}
+}
+
+function tryExitFullscreen() {
+  try {
+    if (document.fullscreenElement && document.exitFullscreen) {
+      const p = document.exitFullscreen();
+      if (p && p.catch) p.catch(() => {});
+    } else if (document.webkitFullscreenElement && document.webkitExitFullscreen) {
+      document.webkitExitFullscreen();
+    }
+  } catch (_) {}
+}
+
+function setBottomBarVisible(visible) {
+  const bar = document.getElementById('bottomBar');
+  if (!bar) return;
+  bar.classList.toggle('hidden', !visible);
+}
+
 function showWinner(idx) {
   const p = state.players[idx];
   el.winnerName.textContent = p.name || 'لاعب بدون اسم';
@@ -723,6 +752,9 @@ function showWinner(idx) {
   el.winnerScreen.setAttribute('aria-hidden', 'false');
   state.winnerShown = true;
   state.currentWinnerIdx = idx;
+  // غمر كامل: إخفاء الشريط السفلي + محاولة ملء الشاشة
+  setBottomBarVisible(false);
+  tryEnterFullscreen(el.winnerScreen);
   // تشغيل فيديو الاحتفال من البداية (مكتوم + لوب)
   try {
     el.winnerVideo.currentTime = 0;
@@ -837,6 +869,8 @@ function hideWinner() {
     saveState();
   }
   try { el.winnerVideo.pause(); } catch (_) {}
+  tryExitFullscreen();
+  setBottomBarVisible(true);
   el.winnerScreen.classList.add('hidden');
   el.winnerScreen.setAttribute('aria-hidden', 'true');
   el.listScreen.classList.remove('hidden');
@@ -934,6 +968,8 @@ function resetAll() {
   saveState();
   closeSubScreens();
   try { el.winnerVideo.pause(); } catch (_) {}
+  tryExitFullscreen();
+  setBottomBarVisible(true);
   el.winnerScreen.classList.add('hidden');
   el.winnerScreen.setAttribute('aria-hidden', 'true');
   el.listScreen.classList.remove('hidden');
