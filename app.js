@@ -11,7 +11,7 @@
    - شاشة فوز بنظام الإقرار + زر "الفائز" اليدوي
    ==================================================================== */
 
-const APP_VERSION    = 17;             // يجب أن يطابق version.json و ?v= في index.html
+const APP_VERSION    = 18;             // يجب أن يطابق version.json و ?v= في index.html
 const PLAYERS_COUNT  = 10;
 const STORAGE_KEY    = 'madagish.v1';
 const REFRESH_MS     = 3000;
@@ -909,6 +909,7 @@ function hideWinner() {
 
 /* ============ صندوق التأكيد + Prompt المضمّن ============ */
 let pendingConfirmAction = null;
+let confirmMandatory = false;   // نافذة إجبارية: لا إلغاء ولا إغلاق بالضغط خارجها
 
 function showConfirm(opts) {
   el.confirmTitle.textContent = opts.title || 'تأكيد';
@@ -948,6 +949,9 @@ function showPromptModal(opts) {
   inp.value = opts.initial || '';
   inp.placeholder = opts.placeholder || '';
 
+  confirmMandatory = !!opts.mandatory;
+  el.confirmCancel.classList.toggle('hidden', confirmMandatory);
+
   pendingConfirmAction = () => {
     const v = inp.value;
     if (typeof opts.onOk === 'function') opts.onOk(v);
@@ -960,6 +964,8 @@ function showPromptModal(opts) {
 
 function closeConfirm() {
   pendingConfirmAction = null;
+  confirmMandatory = false;
+  el.confirmCancel.classList.remove('hidden');
   el.confirmOverlay.classList.add('hidden');
   el.confirmOverlay.setAttribute('aria-hidden', 'true');
   const inp = document.getElementById('confirmInlineInput');
@@ -1033,7 +1039,7 @@ function bindEvents() {
   el.confirmCancel.addEventListener('click', closeConfirm);
   el.confirmYes.addEventListener('click', runConfirmAction);
   el.confirmOverlay.addEventListener('click', (e) => {
-    if (e.target === el.confirmOverlay) closeConfirm();
+    if (e.target === el.confirmOverlay && !confirmMandatory) closeConfirm();
   });
   el.backBtn.addEventListener('click', hideWinner);
 
@@ -1043,6 +1049,7 @@ function bindEvents() {
   el.devBackBtn.addEventListener('click', backToList);
   el.roundsBackBtn.addEventListener('click', backToList);
   document.getElementById('shareBtn').addEventListener('click', onShareBtnClick);
+  bindChatEvents();
 
   bindOutsideTapDismiss();
 
@@ -1189,6 +1196,7 @@ function startSharing() {
   saveState();               // يحفظ + يدفع أول نسخة
   updateShareBtn();
   startShareViewersLoop();
+  startChat(state.shareId, true);
   openShareDialog();
 }
 
@@ -1197,12 +1205,17 @@ function stopSharing() {
   state.shareId = null;
   saveState();
   updateShareBtn();
+  stopChat();
   if (id) {
     // شاهد التوقف: صفحة إجبارية عند المشاهدين، والرابط يموت للأبد
     fetch(boardUrl(id, 'state'), {
       method: 'PUT',
       body: JSON.stringify({ ended: true, rev: state.shareRev + 1 })
     }).catch(() => {});
+    // تنظيف الدردشة والنبضات وقائمة الكتم (توفير مساحة القاعدة)
+    fetch(`${DB_BASE}/boards/${id}/chat.json`,    { method: 'DELETE' }).catch(() => {});
+    fetch(`${DB_BASE}/boards/${id}/viewers.json`, { method: 'DELETE' }).catch(() => {});
+    fetch(`${DB_BASE}/boards/${id}/muted.json`,   { method: 'DELETE' }).catch(() => {});
   }
 }
 
@@ -1300,6 +1313,7 @@ function showEndedScreen() {
   viewerEnded = true;
   clearInterval(viewerPollTimer);
   clearInterval(shareViewersTimer);
+  stopChat();
   document.getElementById('endedScreen').classList.remove('hidden');
   setBottomBarVisible(false);
   try { el.winnerVideo.pause(); } catch (_) {}
@@ -1381,10 +1395,288 @@ function startViewerMode() {
   setInterval(viewerHeartbeat, SHARE_VIEWERS_MS);
   startShareViewersLoop();
 
+  // اللقب الإجباري ثم الدردشة + إشعار الانضمام
+  ensureNick((nick) => {
+    startChat(VIEW_SHARE_ID, false);
+    postJoinNotice(nick);
+  });
+
   window.addEventListener('pagehide', () => {
     try {
       fetch(`${DB_BASE}/boards/${VIEW_SHARE_ID}/viewers/${viewerId}.json`, { method: 'DELETE', keepalive: true });
     } catch (_) {}
+  });
+}
+
+/* ====================================================================
+   الدردشة الحية — أسلوب تيك توك (أثناء المشاركة فقط)
+   ==================================================================== */
+const CHAT_POLL_MS  = 2500;
+const CHAT_RATE_MS  = 2000;    // رسالة كل ثانيتين كحد أقصى
+const CHAT_FETCH_N  = 30;      // آخر 30 رسالة
+
+let chatShareId   = null;
+let chatIsJudge   = false;
+let chatTimer     = null;
+let chatLastSend  = 0;
+let chatLastJson  = '';
+let chatMuted     = false;
+let chatParticipants = {};     // uid → آخر اسم معروف (لقائمة الإدارة)
+
+function chatUid() {
+  let id = null;
+  try {
+    id = localStorage.getItem('madagish.chatUid');
+    if (!id) {
+      id = 'u' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+      localStorage.setItem('madagish.chatUid', id);
+    }
+  } catch (_) { id = 'u' + Math.random().toString(36).slice(2, 10); }
+  return id;
+}
+
+function getNick() {
+  try { return localStorage.getItem('madagish.nick') || null; } catch (_) { return null; }
+}
+function setNick(n) {
+  try { localStorage.setItem('madagish.nick', n); } catch (_) {}
+}
+
+/* نافذة اللقب الإجبارية (للمشاهد الجديد) */
+function ensureNick(onReady) {
+  const existing = getNick();
+  if (existing) { onReady(existing); return; }
+  showPromptModal({
+    title: 'أهلاً بك 👋',
+    body:  'اكتب لقبك او اسمك هنا',
+    okText: 'موافق',
+    inputType: 'text',
+    placeholder: 'لقبك...',
+    mandatory: true,
+    onOk: (val) => {
+      const nick = (val || '').trim().slice(0, 20);
+      if (!nick) { ensureNick(onReady); return; }   // إجباري — لا يكمل بدون لقب
+      setNick(nick);
+      onReady(nick);
+    }
+  });
+}
+
+function chatUrl(path) {
+  return `${DB_BASE}/boards/${chatShareId}/${path}`;
+}
+
+async function sendChatMessage() {
+  const input = document.getElementById('chatInput');
+  const text = (input.value || '').trim().slice(0, 100);
+  if (!text) return;
+  if (chatMuted) return;
+  const now = Date.now();
+  if (now - chatLastSend < CHAT_RATE_MS) { showToast('تمهّل قليلاً بين الرسائل'); return; }
+  chatLastSend = now;
+  input.value = '';
+  const msg = {
+    n: chatIsJudge ? 'الحكم' : (getNick() || 'مشاهد'),
+    t: text,
+    ts: { '.sv': 'timestamp' },
+    uid: chatUid()
+  };
+  if (chatIsJudge) msg.j = 1;
+  try {
+    await fetch(chatUrl('chat.json'), { method: 'POST', body: JSON.stringify(msg) });
+    pollChat();   // اعرضها فوراً
+  } catch (_) { showToast('تعذر الإرسال — تحقق من الشبكة'); }
+}
+
+function postJoinNotice(nick) {
+  // مرة واحدة لكل جلسة لكل مشاركة
+  const flag = 'madagish.joined.' + chatShareId;
+  try { if (sessionStorage.getItem(flag)) return; sessionStorage.setItem(flag, '1'); } catch (_) {}
+  fetch(chatUrl('chat.json'), {
+    method: 'POST',
+    body: JSON.stringify({ sys: 1, n: nick, ts: { '.sv': 'timestamp' }, uid: chatUid() })
+  }).catch(() => {});
+}
+
+function renderChatFeed(data) {
+  const feed = document.getElementById('chatFeed');
+  if (!feed) return;
+  feed.innerHTML = '';
+  if (!data || typeof data !== 'object') return;
+
+  const keys = Object.keys(data).sort();   // مفاتيح Firebase POST مرتبة زمنياً
+  chatParticipants = {};
+  for (const k of keys) {
+    const m = data[k];
+    if (!m || typeof m !== 'object') continue;
+    const name = (typeof m.n === 'string' ? m.n : '').slice(0, 20);
+    const uid  = (typeof m.uid === 'string') ? m.uid : null;
+    if (uid && !m.j) chatParticipants[uid] = name || 'مشاهد';
+
+    const row = document.createElement('div');
+    if (m.sys === 1) {
+      row.className = 'chat-msg sys';
+      const j = document.createElement('span');
+      j.className = 'chat-join';
+      j.textContent = `انضم - ${name || 'مشاهد'}`;
+      row.appendChild(j);
+    } else {
+      row.className = 'chat-msg';
+      const nEl = document.createElement('span');
+      nEl.className = 'chat-name' + (m.j === 1 ? ' judge' : '');
+      nEl.textContent = m.j === 1 ? '👑 الحكم' : (name || 'مشاهد');
+      const tEl = document.createElement('span');
+      tEl.className = 'chat-text';
+      tEl.textContent = (typeof m.t === 'string' ? m.t : '').slice(0, 100);
+      row.appendChild(nEl);
+      row.appendChild(tEl);
+    }
+    feed.appendChild(row);
+  }
+  feed.scrollTop = feed.scrollHeight;
+}
+
+async function pollChat() {
+  if (!chatShareId) return;
+  try {
+    const res = await fetch(
+      chatUrl('chat.json') + `?orderBy=%22%24key%22&limitToLast=${CHAT_FETCH_N}&t=` + Date.now(),
+      { cache: 'no-store' }
+    );
+    if (!res.ok) return;
+    const txt = await res.text();
+    if (txt !== chatLastJson) {
+      chatLastJson = txt;
+      renderChatFeed(JSON.parse(txt));
+    }
+    // حالة الكتم (للمشاهد فقط)
+    if (!chatIsJudge) {
+      const mres = await fetch(chatUrl(`muted/${chatUid()}.json`) + '?t=' + Date.now(), { cache: 'no-store' });
+      if (mres.ok) {
+        const muted = (await mres.json()) === 1;
+        if (muted !== chatMuted) {
+          chatMuted = muted;
+          const input = document.getElementById('chatInput');
+          if (input) {
+            input.disabled = muted;
+            input.placeholder = muted ? 'تم كتم صوتك من قبل الحكم 🔇' : 'اكتب...';
+          }
+        }
+      }
+    }
+  } catch (_) { /* شبكة */ }
+}
+
+/* إظهار/إخفاء الدردشة */
+function setChatVisible(visible) {
+  const root = document.getElementById('chatRoot');
+  const showBtn = document.getElementById('chatShowBtn');
+  if (!root || !showBtn) return;
+  root.classList.toggle('hidden', !visible);
+  showBtn.classList.toggle('hidden', visible || !chatShareId);
+  try { localStorage.setItem('madagish.chatVisible', visible ? '1' : '0'); } catch (_) {}
+}
+
+function chatPreferredVisible() {
+  try { return localStorage.getItem('madagish.chatVisible') !== '0'; } catch (_) { return true; }
+}
+
+/* قائمة إدارة المشاهدين (كتم/فك — للحكم) */
+async function openModList() {
+  const overlay = document.getElementById('modOverlay');
+  const list = document.getElementById('modList');
+  if (!overlay || !list) return;
+  list.innerHTML = '';
+
+  let mutedMap = {};
+  try {
+    const res = await fetch(chatUrl('muted.json') + '?t=' + Date.now(), { cache: 'no-store' });
+    if (res.ok) mutedMap = (await res.json()) || {};
+  } catch (_) {}
+
+  const uids = Object.keys(chatParticipants);
+  if (uids.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'mod-empty';
+    empty.textContent = 'لا يوجد مشاهدون كتبوا في الدردشة بعد.';
+    list.appendChild(empty);
+  } else {
+    for (const uid of uids) {
+      const row = document.createElement('div');
+      row.className = 'mod-row';
+      const nameEl = document.createElement('span');
+      nameEl.className = 'mod-name';
+      nameEl.textContent = chatParticipants[uid];
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      let isMuted = mutedMap[uid] === 1;
+      const paint = () => {
+        btn.className = 'mod-btn' + (isMuted ? ' muted' : '');
+        btn.textContent = isMuted ? 'فك الكتم' : 'كتم';
+      };
+      paint();
+      btn.addEventListener('click', async () => {
+        try {
+          if (isMuted) {
+            await fetch(chatUrl(`muted/${uid}.json`), { method: 'DELETE' });
+          } else {
+            await fetch(chatUrl(`muted/${uid}.json`), { method: 'PUT', body: '1' });
+          }
+          isMuted = !isMuted;
+          paint();
+        } catch (_) { showToast('تعذر التنفيذ — تحقق من الشبكة'); }
+      });
+      row.appendChild(nameEl);
+      row.appendChild(btn);
+      list.appendChild(row);
+    }
+  }
+  overlay.classList.remove('hidden');
+}
+
+function startChat(shareId, isJudge) {
+  chatShareId = shareId;
+  chatIsJudge = isJudge;
+  chatLastJson = '';
+  chatMuted = false;
+
+  const modBtn = document.getElementById('chatModBtn');
+  if (modBtn) modBtn.classList.toggle('hidden', !isJudge);
+
+  setChatVisible(chatPreferredVisible());
+  clearInterval(chatTimer);
+  chatTimer = setInterval(pollChat, CHAT_POLL_MS);
+  pollChat();
+}
+
+function stopChat() {
+  chatShareId = null;
+  clearInterval(chatTimer);
+  const root = document.getElementById('chatRoot');
+  const showBtn = document.getElementById('chatShowBtn');
+  if (root) root.classList.add('hidden');
+  if (showBtn) showBtn.classList.add('hidden');
+}
+
+function bindChatEvents() {
+  const input   = document.getElementById('chatInput');
+  const sendBtn = document.getElementById('chatSendBtn');
+  const hideBtn = document.getElementById('chatHideBtn');
+  const showBtn = document.getElementById('chatShowBtn');
+  const modBtn  = document.getElementById('chatModBtn');
+  const modClose = document.getElementById('modCloseBtn');
+  const modOverlay = document.getElementById('modOverlay');
+
+  sendBtn.addEventListener('click', sendChatMessage);
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); sendChatMessage(); }
+  });
+  hideBtn.addEventListener('click', () => setChatVisible(false));
+  showBtn.addEventListener('click', () => setChatVisible(true));
+  modBtn.addEventListener('click', openModList);
+  modClose.addEventListener('click', () => modOverlay.classList.add('hidden'));
+  modOverlay.addEventListener('click', (e) => {
+    if (e.target === modOverlay) modOverlay.classList.add('hidden');
   });
 }
 
@@ -1476,6 +1768,7 @@ function init() {
     // استئناف مشاركة نشطة بعد إعادة تحميل صفحة الحكم
     schedulePushBoard();
     startShareViewersLoop();
+    startChat(state.shareId, true);
   }
 }
 

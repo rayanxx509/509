@@ -9,7 +9,7 @@
   <meta name="theme-color" content="#ffffff" />
   <link rel="manifest" href="manifest.json" />
   <link rel="apple-touch-icon" href="icon-192.png" />
-  <link rel="stylesheet" href="styles.css?v=17" />
+  <link rel="stylesheet" href="styles.css?v=18" />
   <title>المداقش — نشرة الحكم</title>
 </head>
 <body>
@@ -126,6 +126,41 @@
     <div class="bar-spacer"></div>
   </nav>
 
+  <!-- الدردشة الحية (أثناء المشاركة فقط) — أسلوب تيك توك -->
+  <div id="chatRoot" class="chat-root hidden" aria-live="polite">
+    <div id="chatFeed" class="chat-feed"></div>
+    <div class="chat-input-row">
+      <button id="chatHideBtn" class="chat-icon-btn" type="button" aria-label="إخفاء الدردشة" title="إخفاء الدردشة">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><line x1="4" y1="4" x2="20" y2="20"/></svg>
+      </button>
+      <input id="chatInput" class="chat-input" type="text" maxlength="100"
+             placeholder="اكتب..." enterkeyhint="send" autocomplete="off" />
+      <button id="chatSendBtn" class="chat-icon-btn" type="button" aria-label="إرسال" title="إرسال">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+      </button>
+      <button id="chatModBtn" class="chat-icon-btn hidden" type="button" aria-label="إدارة المشاهدين" title="إدارة المشاهدين">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- زر إظهار الدردشة (عند إخفائها) -->
+  <button id="chatShowBtn" class="chat-show-btn hidden" type="button">
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+    <span>إظهار الدردشة</span>
+  </button>
+
+  <!-- نافذة إدارة المشاهدين (كتم/فك — للحكم فقط) -->
+  <div id="modOverlay" class="overlay hidden" aria-hidden="true">
+    <div class="confirm-box" role="dialog" aria-modal="true">
+      <h2 class="confirm-title">إدارة المشاهدين</h2>
+      <div id="modList" class="mod-list"></div>
+      <div class="confirm-actions">
+        <button id="modCloseBtn" class="btn-secondary" type="button">إغلاق</button>
+      </div>
+    </div>
+  </div>
+
   <!-- صفحة انتهاء المشاركة (للمشاهدين فقط) -->
   <section id="endedScreen" class="ended-screen hidden" aria-hidden="true">
     <p class="ended-text">
@@ -146,6 +181,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=17"></script>
+  <script src="app.js?v=18"></script>
 </body>
 </html>

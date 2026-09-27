@@ -442,6 +442,169 @@ body.viewer-mode .winner-amount-input {
   pointer-events: none;      /* قراءة فقط — لا كيبورد ولا تعديل */
 }
 
+/* ======= الدردشة الحية — أسلوب تيك توك ======= */
+.chat-root {
+  position: fixed;
+  right: 0;
+  left: 0;
+  bottom: calc(58px + env(safe-area-inset-bottom));  /* فوق الشريط السفلي */
+  z-index: 58;                                        /* تحت شاشة الفوز (65) */
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0 10px;
+  pointer-events: none;                               /* الرسائل لا تحجب اللمس؛ الإدخال يفعّل نفسه */
+}
+
+.chat-feed {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  max-height: 32vh;
+  overflow-y: auto;
+  padding: 24px 2px 2px;
+  pointer-events: auto;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 26px);
+          mask-image: linear-gradient(to bottom, transparent 0, #000 26px);
+  scrollbar-width: none;
+}
+.chat-feed::-webkit-scrollbar { display: none; }
+
+.chat-msg {
+  align-self: flex-start;          /* في RTL = جهة اليمين */
+  max-width: 82%;
+  background: rgba(0,0,0,0.22);    /* تظليل خفيف يعزل النص عن الخلفية */
+  border-radius: 12px;
+  padding: 5px 10px;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: #ffffff;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.7);
+  word-break: break-word;
+}
+.chat-msg .chat-name {
+  color: rgba(255,255,255,0.62);   /* اسم المرسل رمادي فاتح */
+  font-size: 12px;
+  font-weight: 600;
+  margin-inline-end: 6px;
+}
+.chat-msg .chat-name.judge { color: #FFD75E; }      /* الحكم ذهبي */
+.chat-msg .chat-text { font-weight: 600; }
+
+.chat-msg.sys {
+  background: transparent;
+  color: rgba(255,255,255,0.0);
+}
+.chat-msg.sys .chat-join {
+  color: #b8b8b8;                  /* إشعار الانضمام رمادي فاتح */
+  font-size: 12px;
+  font-weight: 600;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.6);
+}
+
+/* على خلفية الصفحة البيضاء (خارج بث ملون) نعطي الرسائل خلفية أوضح قليلاً */
+.chat-input-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  pointer-events: auto;
+}
+
+.chat-input {
+  flex: 1;
+  height: 40px;
+  border: none;
+  outline: none;
+  border-radius: 999px;
+  background: rgba(0,0,0,0.45);
+  color: #fff;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 0 16px;
+  text-align: right;
+}
+.chat-input::placeholder { color: rgba(255,255,255,0.65); }
+.chat-input:disabled { opacity: 0.55; }
+
+.chat-icon-btn {
+  flex: 0 0 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: rgba(0,0,0,0.45);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.chat-icon-btn:active { background: rgba(0,0,0,0.65); }
+
+.chat-show-btn {
+  position: fixed;
+  bottom: calc(64px + env(safe-area-inset-bottom));
+  right: 10px;
+  z-index: 58;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(0,0,0,0.45);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 8px 14px;
+}
+.chat-show-btn:active { background: rgba(0,0,0,0.65); }
+
+/* قائمة إدارة المشاهدين */
+.mod-list {
+  max-height: 46vh;
+  overflow-y: auto;
+  margin: 8px 0 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.mod-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 8px 12px;
+}
+.mod-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: #111;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mod-btn {
+  flex: 0 0 auto;
+  font-size: 12.5px;
+  font-weight: 700;
+  border-radius: 8px;
+  padding: 7px 14px;
+  background: #FEE2E2;
+  color: #B91C1C;
+  border: 1px solid #FCA5A5;
+}
+.mod-btn.muted {
+  background: #DCFCE7;
+  color: #166534;
+  border-color: #86EFAC;
+}
+.mod-empty {
+  text-align: center;
+  color: #9ca3af;
+  font-size: 13px;
+  padding: 14px 0;
+}
+
 /* ======= صفحة انتهاء المشاركة ======= */
 .ended-screen {
   position: fixed;
