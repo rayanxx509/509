@@ -11,7 +11,7 @@
    - شاشة فوز بنظام الإقرار + زر "الفائز" اليدوي
    ==================================================================== */
 
-const APP_VERSION    = 39;             // يجب أن يطابق version.json و ?v= في index.html
+const APP_VERSION    = 40;             // يجب أن يطابق version.json و ?v= في index.html
 const PLAYERS_COUNT  = 10;
 const STORAGE_KEY    = 'madagish.v1';
 const REFRESH_MS     = 3000;
@@ -519,7 +519,7 @@ function renderPlayers() {
     nameInput.dataset.idx = String(i);
     nameInput.dataset.kind = 'name';
     nameInput.value = p.name || '';
-    if (VIEWER_MODE) nameInput.setAttribute('readonly', '');
+    if (VIEWER_MODE) { nameInput.setAttribute('readonly', ''); nameInput.setAttribute('tabindex', '-1'); }
     else bindNameInput(nameInput, i);
 
     // 2) حقل الرصيد (أقصى اليسار مع زر الخصم)
@@ -534,7 +534,7 @@ function renderPlayers() {
     balanceInput.dataset.idx = String(i);
     balanceInput.dataset.kind = 'balance';
     balanceInput.value = balance === null ? '' : formatAmount(balance);
-    if (VIEWER_MODE) balanceInput.setAttribute('readonly', '');
+    if (VIEWER_MODE) { balanceInput.setAttribute('readonly', ''); balanceInput.setAttribute('tabindex', '-1'); }
     else bindBalanceInput(balanceInput, i);
 
     // 3) زر الخصم (−) — أقصى اليسار
@@ -1050,6 +1050,11 @@ function closeConfirm() {
   if (inp) inp.remove();
   const cnt = document.getElementById('confirmInlineCounter');
   if (cnt) cnt.remove();
+  // إغلاق النافذة لا يترك الكيبورد يقفز لحقل آخر (سبب بق الكيبورد عند المشاهد)
+  try {
+    const a = document.activeElement;
+    if (a && a !== document.body && typeof a.blur === 'function') a.blur();
+  } catch (_) {}
 }
 
 function runConfirmAction() {
@@ -1109,7 +1114,13 @@ function bindOutsideTapDismiss() {
 
 /* ============ الأحداث ============ */
 function bindEvents() {
-  bindWinnerAmountInput();
+  // وضع المشاهدة: حقل مبلغ الفوز للقراءة فقط — لا ربط معالجات تعديل إطلاقاً
+  if (VIEWER_MODE) {
+    el.winnerAmountInput.setAttribute('readonly', '');
+    el.winnerAmountInput.setAttribute('tabindex', '-1');
+  } else {
+    bindWinnerAmountInput();
+  }
   el.resetBtn.addEventListener('click', askReset);
   el.capitalBtn.addEventListener('click', promptCapital);
   el.showWinnerBtn.addEventListener('click', () => { showAnyWinnerManually(); });
@@ -1489,6 +1500,16 @@ async function viewerPoll() {
 
 function startViewerMode() {
   document.body.classList.add('viewer-mode');
+
+  // حارس صارم: أي تركيز يصل لحقول اللوحة (من انتقال كيبورد، بطء شبكة، أي سبب)
+  // يُطرد في نفس اللحظة — يستحيل فتح الكيبورد على حقول النشرة في وضع المشاهدة
+  document.addEventListener('focusin', (e) => {
+    const t = e.target;
+    if (t instanceof HTMLInputElement &&
+        (t.id === 'winnerAmountInput' || t.classList.contains('player-input'))) {
+      t.blur();
+    }
+  });
 
   viewerPoll();
   viewerPollTimer = setInterval(viewerPoll, SHARE_POLL_MS);
