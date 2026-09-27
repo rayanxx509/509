@@ -9,7 +9,7 @@
   <meta name="theme-color" content="#ffffff" />
   <link rel="manifest" href="manifest.json" />
   <link rel="apple-touch-icon" href="icon-192.png" />
-  <link rel="stylesheet" href="styles.css?v=25" />
+  <link rel="stylesheet" href="styles.css?v=27" />
   <title>المداقش — نشرة الحكم</title>
 </head>
 <body>
@@ -146,7 +146,42 @@
       <span class="bar-icon"><span id="meBarAvatar" class="bar-avatar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.6"/><path d="M5 20v-1a5.5 5.5 0 0 1 5.5-5.5h3A5.5 5.5 0 0 1 19 19v1"/></svg></span></span>
       <span class="bar-label">أنت</span>
     </button>
+    <button id="ownerBtn" class="bar-item hidden" type="button">
+      <span class="bar-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18h18"/><path d="M4 16 3 7l5 3 4-6 4 6 5-3-1 9z"/></svg></span>
+      <span class="bar-label">لوحة المالك</span>
+    </button>
   </nav>
+
+  <!-- لوحة المالك (تظهر للمالك فقط) -->
+  <section id="ownerScreen" class="screen hidden" aria-hidden="true">
+    <div class="page-card">
+      <h2 class="page-title">👑 لوحة المالك :</h2>
+
+      <p class="owner-sec-title" style="border-top:none;padding-top:0;">حالتي في قوائم المشاهدين :</p>
+      <div class="acc-actions">
+        <button id="ownerVisBtn" class="btn-primary" type="button">🙈 مخفي — اضغط للظهور</button>
+      </div>
+
+      <p class="owner-sec-title">عضو خاص :</p>
+      <p class="acc-hint">أدخل إيميل العضو المسجَّل واليوزر المحجوز الذي تريد إهداءه له.</p>
+      <input id="vipEmail" class="edit-input acc-input" type="email" dir="ltr" placeholder="إيميل العضو" />
+      <input id="vipUser" class="edit-input acc-input" type="text" dir="ltr" autocapitalize="off" spellcheck="false" placeholder="اليوزر المُهدى ( مثال : aa او 101 )" />
+      <p id="vipError" class="edit-hint hidden">—</p>
+      <div class="acc-actions">
+        <button id="vipOkBtn" class="btn-primary" type="button">موافق</button>
+      </div>
+
+      <p class="owner-sec-title">البلاغات :</p>
+      <div id="reportsList" class="owner-list"><div class="mod-empty">جارِ التحميل...</div></div>
+
+      <p class="owner-sec-title">النشرات الحيَّة :</p>
+      <div id="liveList" class="owner-list"><div class="mod-empty">جارِ التحميل...</div></div>
+
+      <button id="ownerBackBtn" class="back-btn" type="button">
+        &lt; رجوع للقائمة
+      </button>
+    </div>
+  </section>
 
   <!-- صفحة الملف الشخصي (لي أو لغيري) -->
   <section id="profileScreen" class="screen hidden" aria-hidden="true">
@@ -205,6 +240,24 @@
             <button id="accLogoutBtn" class="btn-secondary" type="button">تسجيل خروج</button>
             <button id="accForgotBtn2" class="acc-forgot" type="button">تغيير كلمة المرور</button>
           </div>
+        </div>
+      </div>
+
+      <p id="suspendedNotice" class="suspended-notice hidden">
+        ⛔ هذا الملف موقوف مؤقتاً من الإدارة
+      </p>
+
+      <button id="reportBtn" class="report-btn hidden" type="button">
+        🚩 إبلاغ عن المُستخدم
+      </button>
+
+      <div id="adminPanel" class="admin-panel hidden">
+        <p class="admin-title">👑 أدوات المالك :</p>
+        <p id="adminReports" class="admin-reports">عدد البلاغات : 0</p>
+        <div class="admin-actions">
+          <button id="adminSuspendBtn" class="admin-btn" type="button">⏸ إيقاف مؤقت</button>
+          <button id="adminClearRepBtn" class="admin-btn" type="button">🧹 مسح البلاغات</button>
+          <button id="adminDeleteBtn" class="admin-btn danger" type="button">🗑 حذف الملف نهائياً</button>
         </div>
       </div>
 
@@ -278,6 +331,9 @@
       <button id="chatSendBtn" class="chat-icon-btn" type="button" aria-label="إرسال" title="إرسال">
         <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
       </button>
+      <button id="viewersBtn" class="chat-icon-btn" type="button" aria-label="المشاهدون الآن" title="المشاهدون الآن">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7.5 11-7.5S23 12 23 12s-4 7.5-11 7.5S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>
+      </button>
       <button id="chatModBtn" class="chat-icon-btn hidden" type="button" aria-label="إدارة المشاهدين" title="إدارة المشاهدين">
         <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
       </button>
@@ -289,6 +345,17 @@
     <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
     <span>إظهار الدردشة</span>
   </button>
+
+  <!-- قائمة المشاهدين الآن (للجميع) -->
+  <div id="viewersOverlay" class="overlay hidden" aria-hidden="true">
+    <div class="confirm-box" role="dialog" aria-modal="true">
+      <h2 class="confirm-title">المشاهدون الآن 👁</h2>
+      <div id="viewersList" class="mod-list"></div>
+      <div class="confirm-actions">
+        <button id="viewersCloseBtn" class="btn-secondary" type="button">إغلاق</button>
+      </div>
+    </div>
+  </div>
 
   <!-- نافذة إدارة المشاهدين (كتم/فك — للحكم فقط) -->
   <div id="modOverlay" class="overlay hidden" aria-hidden="true">
@@ -321,6 +388,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=25"></script>
+  <script src="app.js?v=27"></script>
 </body>
 </html>

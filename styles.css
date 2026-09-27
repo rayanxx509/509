@@ -770,6 +770,124 @@ body.viewer-mode .winner-amount-input {
   word-break: break-word;
 }
 
+/* ======= شارة المالك في الدردشة ======= */
+.chat-msg .chat-name.owner { color: #FF3B30; }   /* أحمر ساطع مميز */
+
+/* قائمة المشاهدين العامة */
+.viewer-row-owner { color: #FF3B30 !important; }
+.viewer-row-judge { color: #B45309; }
+
+/* ======= الإبلاغ + إشعار الإيقاف + أدوات المالك ======= */
+.suspended-notice {
+  background: #FEF2F2;
+  border: 1px solid #FECACA;
+  color: #B91C1C;
+  font-size: 14px;
+  font-weight: 800;
+  border-radius: 10px;
+  padding: 12px;
+  text-align: center;
+  margin: 8px 0;
+}
+.report-btn {
+  align-self: center;
+  margin-top: 10px;
+  background: #FFF1F2;
+  border: 1px solid #FECDD3;
+  color: #BE123C;
+  font-size: 13px;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 9px 18px;
+}
+.report-btn:active { background: #FFE4E6; }
+
+.admin-panel {
+  border: 1.5px dashed #F59E0B;
+  background: #FFFBEB;
+  border-radius: 12px;
+  padding: 12px;
+  margin-top: 12px;
+}
+.admin-title {
+  font-size: 14px;
+  font-weight: 800;
+  color: #92400E;
+  margin: 0 0 6px;
+  text-align: right;
+}
+.admin-reports {
+  font-size: 13px;
+  font-weight: 700;
+  color: #B45309;
+  margin: 0 0 8px;
+  text-align: right;
+}
+.admin-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.admin-btn {
+  font-size: 12.5px;
+  font-weight: 700;
+  border-radius: 8px;
+  padding: 8px 12px;
+  background: #fff;
+  border: 1px solid #FCD34D;
+  color: #92400E;
+}
+.admin-btn:active { background: #FEF3C7; }
+.admin-btn.danger {
+  background: #FEE2E2;
+  border-color: #FCA5A5;
+  color: #B91C1C;
+}
+
+/* ======= لوحة المالك ======= */
+.owner-sec-title {
+  font-size: 16px;
+  font-weight: 800;
+  margin: 16px 0 4px;
+  text-align: right;
+  border-top: 1px solid #eee;
+  padding-top: 12px;
+}
+.owner-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.owner-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 10px 12px;
+  cursor: pointer;
+}
+.owner-row:active { background: #f3f4f6; }
+.owner-row-main {
+  min-width: 0;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #111;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.owner-row-sub {
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 800;
+  color: #B45309;
+  white-space: nowrap;
+}
+.owner-row-sub.live { color: #16A34A; }
+
 /* ======= قسم حماية الحساب ======= */
 .account-section {
   border-top: 1px solid #eee;
