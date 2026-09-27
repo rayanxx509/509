@@ -11,7 +11,7 @@
    - شاشة فوز بنظام الإقرار + زر "الفائز" اليدوي
    ==================================================================== */
 
-const APP_VERSION    = 38;             // يجب أن يطابق version.json و ?v= في index.html
+const APP_VERSION    = 39;             // يجب أن يطابق version.json و ?v= في index.html
 const PLAYERS_COUNT  = 10;
 const STORAGE_KEY    = 'madagish.v1';
 const REFRESH_MS     = 3000;
@@ -1351,9 +1351,17 @@ function openShareDialog(link, kind) {
     initial: url,
     readonly: true,
     onOk: async () => {
+      // لروابط البث: رسالة جاهزة باسم الحكم فوق الرابط — يقرأها المستلم في واتساب قبل الدخول
+      let payload = url;
+      if (kind === 'judge' || kind === 'viewer') {
+        const jn = (kind === 'judge') ? (getNick() || shareJudgeName) : shareJudgeName;
+        payload = (jn
+          ? `شاهد الآن بث مُباشر لنشرة المداقش مع الحكم "${jn}" 👇`
+          : 'شاهد الآن بث مُباشر لنشرة المداقش 👇') + '\n' + url;
+      }
       let ok = false;
-      try { await navigator.clipboard.writeText(url); ok = true; } catch (_) {}
-      showToast(ok ? 'تم نسخ الرابط ✓' : url);
+      try { await navigator.clipboard.writeText(payload); ok = true; } catch (_) {}
+      showToast(ok ? 'تم النسخ مع رسالة جاهزة للإرسال ✓' : url);
     }
   });
 }
@@ -1378,6 +1386,8 @@ function activeShareIdForViewers() {
   return VIEWER_MODE ? VIEW_SHARE_ID : state.shareId;
 }
 
+let shareJudgeName = null;   // اسم حكم البث الحالي — لرسالة المشاركة الجاهزة
+
 async function refreshShareViewersCount() {
   const id = activeShareIdForViewers();
   if (!id) return;
@@ -1388,9 +1398,14 @@ async function refreshShareViewersCount() {
     let count = 0;
     if (data && typeof data === 'object') {
       let maxTs = 0;
-      const entries = Object.keys(data).map(k => (data[k] && typeof data[k].ts === 'number') ? data[k].ts : 0);
-      for (const ts of entries) if (ts > maxTs) maxTs = ts;
-      for (const ts of entries) if (maxTs - ts < PRESENCE_FRESH_MS) count++;
+      const arr = Object.keys(data).map(k => data[k]).filter(e => e && typeof e.ts === 'number');
+      for (const e of arr) if (e.ts > maxTs) maxTs = e.ts;
+      for (const e of arr) {
+        if (maxTs - e.ts < PRESENCE_FRESH_MS) {
+          count++;
+          if (e.j === 1 && e.n) shareJudgeName = String(e.n).slice(0, 20);
+        }
+      }
     }
     // العدد داخل كبسولة العين بجانب زر الإرسال
     const badge = document.getElementById('viewersCount');
@@ -2640,7 +2655,7 @@ function reportUserFlow(target) {
     placeholder: 'اذكر السبب',
     maxLength: 200,
     counterMax: 200,
-    onOk: async (reason) => {
+    onOk: async (reason) => {   /* reportUserFlow */
       try {
         // كل مُبلّغ يُحسب مرة واحدة لكل مستخدم — مقاوم للسبام
         const body = { ts: { '.sv': 'timestamp' } };
@@ -3089,6 +3104,11 @@ function bindProfileEvents() {
   // عارض الصورة: يُغلق بلمسة في أي مكان
   document.getElementById('imgViewer').addEventListener('click', () => {
     document.getElementById('imgViewer').classList.add('hidden');
+  });
+
+  // زر صفحة انتهاء المشاركة: الذهاب للقائمة الرئيسية (التطبيق الكامل بدون وضع المشاهدة)
+  document.getElementById('endedHomeBtn').addEventListener('click', () => {
+    location.href = location.origin + location.pathname;
   });
 }
 

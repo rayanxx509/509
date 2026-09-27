@@ -520,20 +520,23 @@ body.viewer-mode .winner-amount-input {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding: 0 10px;
+  padding: 6px 10px 4px;
   pointer-events: none;                               /* الرسائل لا تحجب اللمس؛ الإدخال يفعّل نفسه */
+  /* طبقة خلفية للمحادثات: من أقصى اليمين لأقصى اليسار — ظل 10% أسفل يتدرج للشفافية أعلى */
+  background: linear-gradient(to top, rgba(0,0,0,0.10) 0%, rgba(0,0,0,0.055) 55%, rgba(0,0,0,0) 100%);
 }
 
 .chat-feed {
   display: flex;
   flex-direction: column;
   gap: 5px;
-  max-height: 32vh;
+  /* نافذة أضيق: ~4 رسائل ظاهرة والرابعة القديمة تتلاشى في الأعلى */
+  max-height: 158px;
   overflow-y: auto;
-  padding: 24px 2px 2px;
+  padding: 40px 2px 2px;
   pointer-events: auto;
-  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 26px);
-          mask-image: linear-gradient(to bottom, transparent 0, #000 26px);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, rgba(0,0,0,0.35) 30px, #000 62px);
+          mask-image: linear-gradient(to bottom, transparent 0, rgba(0,0,0,0.35) 30px, #000 62px);
   scrollbar-width: none;
 }
 .chat-feed::-webkit-scrollbar { display: none; }
@@ -1368,6 +1371,12 @@ body.viewer-mode .winner-amount-input {
   padding: 24px;
   text-align: center;
 }
+.ended-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 26px;
+}
 .ended-text {
   font-size: 18px;
   font-weight: 700;
@@ -1375,6 +1384,15 @@ body.viewer-mode .winner-amount-input {
   line-height: 2.2;
   margin: 0;
 }
+.ended-home-btn {
+  background: var(--winner-green);
+  color: #fff;
+  font-size: 16px;
+  font-weight: 800;
+  border-radius: 999px;
+  padding: 13px 28px;
+}
+.ended-home-btn:active { opacity: 0.85; }
 
 .online-dot {
   width: 9px;

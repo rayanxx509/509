@@ -9,7 +9,14 @@
   <meta name="theme-color" content="#ffffff" />
   <link rel="manifest" href="manifest.json" />
   <link rel="apple-touch-icon" href="icon-192.png" />
-  <link rel="stylesheet" href="styles.css?v=38" />
+  <!-- معاينة الرابط في واتساب ووسائل التواصل (Open Graph) -->
+  <meta name="description" content="بث حي + دردشة مباشرة — اضغط للدخول والمشاهدة الآن" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="شاهد الآن بث مُباشر لنشرة المداقش 🎴" />
+  <meta property="og:description" content="بث حي + دردشة مباشرة — اضغط للدخول والمشاهدة الآن" />
+  <meta property="og:image" content="https://rayanxx509.github.io/509/icon-512.png" />
+  <meta property="og:site_name" content="المداقش" />
+  <link rel="stylesheet" href="styles.css?v=39" />
   <title>المداقش — نشرة الحكم</title>
 </head>
 <body>
@@ -371,10 +378,15 @@
 
   <!-- صفحة انتهاء المشاركة (للمشاهدين فقط) -->
   <section id="endedScreen" class="ended-screen hidden" aria-hidden="true">
-    <p class="ended-text">
-      نأسف : الحكم أنهى المُشاركة،<br />
-      يمكنك الآن إقفال الصفحة وانتظار مُشاركة جديدة في وقت لاحق.
-    </p>
+    <div class="ended-box">
+      <p class="ended-text">
+        نأسف : الحكم أنهى المُشاركة،<br />
+        يمكنك الآن إقفال الصفحة وانتظار مُشاركة جديدة في وقت لاحق.
+      </p>
+      <button id="endedHomeBtn" class="ended-home-btn" type="button">
+        &gt;&gt; الذهاب للقائمة الرئيسية &lt;&lt;
+      </button>
+    </div>
   </section>
 
   <!-- مربع تأكيد المسح -->
@@ -389,6 +401,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=38"></script>
+  <script src="app.js?v=39"></script>
 </body>
 </html>
