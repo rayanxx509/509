@@ -11,7 +11,7 @@
    - شاشة فوز بنظام الإقرار + زر "الفائز" اليدوي
    ==================================================================== */
 
-const APP_VERSION    = 42;             // يجب أن يطابق version.json و ?v= في index.html
+const APP_VERSION    = 44;             // يجب أن يطابق version.json و ?v= في index.html
 const PLAYERS_COUNT  = 10;
 const STORAGE_KEY    = 'madagish.v1';
 const REFRESH_MS     = 3000;
@@ -1361,6 +1361,95 @@ function startUpdateChecker() {
   // أهم لحظة على الجوال: عودة المستخدم للتبويب/التطبيق من الخلفية
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') check();
+  });
+}
+
+/* ====================================================================
+   مزامنة صور الخلفيات الذكية
+   المستخدم يستبدل الصور على الموقع بنفس أسمائها — التطبيق يكتشف التغيير
+   بنفسه: يسأل عن بصمة كل صورة (ترويسات فقط — بايتات معدودة، بلا تنزيل)،
+   وعند تغيّرها يحمّل الصورة الجديدة كاملة بصمت ثم يبدّلها بلا وميض
+   وبلا إعادة تحميل — لا يمس اللعب ولا الأرصدة ولا أي شيء في الصفحة.
+   ==================================================================== */
+const BG_IMAGES = ['bg-red.jpg', 'bg-orange.jpg', 'bg-black.jpg', 'bg-yellow.jpg',
+                   'bg-olive.jpg', 'bg-green.jpg', 'bg-negative.jpg'];
+const BG_CHECK_MS  = 5 * 60 * 1000;      // فحص خفيف كل 5 دقائق + عند فتح/عودة التطبيق
+const BG_STORE_KEY = 'madagish.bgTags';  // بصمات الصور المعروفة على هذا الجهاز
+
+let bgTags = {};          // اسم الصورة → بصمة محتواها الحالية
+let bgCheckBusy = false;  // منع تداخل دورتي فحص
+
+function loadBgTags() {
+  try {
+    const d = JSON.parse(localStorage.getItem(BG_STORE_KEY) || '{}');
+    if (d && typeof d === 'object') bgTags = d;
+  } catch (_) { bgTags = {}; }
+}
+
+function saveBgTags() {
+  try { localStorage.setItem(BG_STORE_KEY, JSON.stringify(bgTags)); } catch (_) {}
+}
+
+/* بصمة محتوى من ترويسات الملف (ETag + تاريخ آخر تعديل) — تتغير حتماً مع أي استبدال */
+function bgFingerprint(res) {
+  const raw = (res.headers.get('ETag') || '') + (res.headers.get('Last-Modified') || '');
+  const clean = raw.replace(/[^A-Za-z0-9]/g, '').slice(0, 24);
+  return clean || null;
+}
+
+/* حقن روابط الصور المبصومة فوق قواعد الألوان (نفس المحدد — المتأخر يفوز) */
+function applyBgStyles() {
+  let st = document.getElementById('bgLiveStyles');
+  if (!st) {
+    st = document.createElement('style');
+    st.id = 'bgLiveStyles';
+    document.head.appendChild(st);
+  }
+  let css = '';
+  for (const name of BG_IMAGES) {
+    if (!bgTags[name]) continue;
+    const color = name.slice(3, -4);   // bg-red.jpg → red
+    css += `.player-row[data-color="${color}"] { background-image: url('${name}?e=${bgTags[name]}'); }\n`;
+  }
+  st.textContent = css;
+}
+
+async function checkBgImages() {
+  if (bgCheckBusy) return;
+  bgCheckBusy = true;
+  let changed = false;
+  // تسلسلي (صورة فصورة) عمداً: رفق بالاتصالات البطيئة، لا دفعة طلبات واحدة
+  for (const name of BG_IMAGES) {
+    try {
+      // 1) الترويسات فقط — ?t يتجاوز كل طبقات الكاش فتصل البصمة الحقيقية فوراً
+      const head = await fetch(name + '?t=' + Date.now(), { method: 'HEAD', cache: 'no-store' });
+      if (!head.ok) continue;
+      let tag = bgFingerprint(head);
+      if (!tag) { if (bgTags[name]) continue; tag = 'x'; }   // خادم بلا ترويسات: تحميل أولي فقط
+      if (bgTags[name] === tag) continue;                     // لم تتغير — صفر تنزيل
+
+      // 2) صورة مستبدلة (أو أول تعرف): حمّلها كاملة بصمت — تُخزن في كاش المتصفح لنفس الرابط
+      const url = name + '?e=' + tag;
+      const full = await fetch(url, { cache: 'reload' });
+      if (!full.ok) continue;
+      const tag2 = bgFingerprint(full);
+      if (tag2 && tag2 !== tag) continue;   // انتشار الموقع غير مكتمل — نعيد بالدورة القادمة
+      await full.blob();                    // لا تبديل قبل اكتمال آخر بايت (صفر وميض)
+      bgTags[name] = tag;
+      changed = true;
+    } catch (_) { /* أوفلاين/خطأ شبكة — نحاول في الدورة القادمة بصمت */ }
+  }
+  if (changed) { applyBgStyles(); saveBgTags(); }
+  bgCheckBusy = false;
+}
+
+function startBgSync() {
+  loadBgTags();
+  applyBgStyles();     // فوري من بصمات هذا الجهاز المحفوظة — بلا انتظار شبكة
+  checkBgImages();     // ثم تحقق فعلي بالخلفية
+  setInterval(checkBgImages, BG_CHECK_MS);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') checkBgImages();
   });
 }
 
@@ -3427,6 +3516,7 @@ function init() {
   render();
   updateShareBtn();
   startUpdateChecker();
+  startBgSync();       // مزامنة صور الخلفيات الذكية (الحكم والمشاهد معاً)
   startPresence();
   recordMonthlyVisit();
   loadMyProfile();

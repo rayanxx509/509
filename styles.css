@@ -307,13 +307,16 @@ button {
   text-shadow: 0 1px 2px rgba(255,255,255,0.95), 0 0 8px rgba(255,255,255,0.8);
 }
 
-.player-row[data-color="red"]      { background-color: var(--c-red);    background-image: url('bg-red.jpg'); }
-.player-row[data-color="orange"]   { background-color: var(--c-orange); background-image: url('bg-orange.jpg'); }
-.player-row[data-color="black"]    { background-color: var(--c-black);  background-image: url('bg-black.jpg'); }
-.player-row[data-color="yellow"]   { background-color: var(--c-yellow); background-image: url('bg-yellow.jpg'); }
-.player-row[data-color="olive"]    { background-color: var(--c-olive);  background-image: url('bg-olive.jpg'); }
-.player-row[data-color="green"]    { background-color: var(--c-green);  background-image: url('bg-green.jpg'); }
-.player-row[data-color="negative"] { background-color: #fde7f0;         background-image: url('bg-negative.jpg'); }
+/* الصور تُحقن من app.js (مزامنة الصور الذكية — بصمة ETag لكل صورة):
+   استبدال صورة بنفس اسمها على الموقع يصل لكل الأجهزة تلقائياً بلا أي خطوة.
+   الألوان الصلبة هنا = الظهور الفوري والاحتياط حتى اكتمال تحميل الصور */
+.player-row[data-color="red"]      { background-color: var(--c-red); }
+.player-row[data-color="orange"]   { background-color: var(--c-orange); }
+.player-row[data-color="black"]    { background-color: var(--c-black); }
+.player-row[data-color="yellow"]   { background-color: var(--c-yellow); }
+.player-row[data-color="olive"]    { background-color: var(--c-olive); }
+.player-row[data-color="green"]    { background-color: var(--c-green); }
+.player-row[data-color="negative"] { background-color: #fde7f0; }
 
 /* الخط الفاصل بين الاسم والرصيد يتكيّف مع لون الخلفية */
 .player-row[data-color="red"]   .balance-btn,
