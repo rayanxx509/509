@@ -11,7 +11,7 @@
    - شاشة فوز بنظام الإقرار + زر "الفائز" اليدوي
    ==================================================================== */
 
-const APP_VERSION    = 44;             // يجب أن يطابق version.json و ?v= في index.html
+const APP_VERSION    = 45;             // يجب أن يطابق version.json و ?v= في index.html
 const PLAYERS_COUNT  = 10;
 const STORAGE_KEY    = 'madagish.v1';
 const REFRESH_MS     = 3000;
@@ -943,6 +943,7 @@ function closeSubScreens() {
   if (ps) ps.classList.add('hidden');
   const os = document.getElementById('ownerScreen');
   if (os) os.classList.add('hidden');
+  closeSettingsDrawer(true);   // مغادرة الملف = الدرج لا يبقى معلقاً
 }
 
 function openDevScreen() {
@@ -1098,6 +1099,23 @@ function hideWinner() {
   updateManualWinnerBtnState();
 }
 
+/* ============ النوافذ المنزلقة (أسلوب موحّد 2026) ============
+   كل نوافذ التطبيق تنزلق من الأسفل بسلاسة — لا صناديق تطفو بالمنتصف */
+function openOverlaySheet(ov) {
+  if (!ov) return;
+  ov.classList.remove('hidden');
+  ov.setAttribute('aria-hidden', 'false');
+  requestAnimationFrame(() => requestAnimationFrame(() => ov.classList.add('open')));
+}
+
+function closeOverlaySheet(ov) {
+  if (!ov) return;
+  ov.classList.remove('open');
+  ov.setAttribute('aria-hidden', 'true');
+  // لا نخفي قبل اكتمال حركة الانزلاق — وإن أُعيد الفتح خلالها لا نخفي إطلاقاً
+  setTimeout(() => { if (!ov.classList.contains('open')) ov.classList.add('hidden'); }, 300);
+}
+
 /* ============ صندوق التأكيد + Prompt المضمّن ============ */
 let pendingConfirmAction = null;
 let confirmMandatory = false;   // نافذة إجبارية: لا إلغاء ولا إغلاق بالضغط خارجها
@@ -1110,8 +1128,7 @@ function showConfirm(opts) {
   pendingConfirmAction = typeof opts.onOk === 'function' ? opts.onOk : null;
   const existingInput = document.getElementById('confirmInlineInput');
   if (existingInput) existingInput.remove();
-  el.confirmOverlay.classList.remove('hidden');
-  el.confirmOverlay.setAttribute('aria-hidden', 'false');
+  openOverlaySheet(el.confirmOverlay);
 }
 
 function showPromptModal(opts) {
@@ -1165,17 +1182,15 @@ function showPromptModal(opts) {
     if (typeof opts.onOk === 'function') opts.onOk(v);
   };
 
-  el.confirmOverlay.classList.remove('hidden');
-  el.confirmOverlay.setAttribute('aria-hidden', 'false');
-  setTimeout(() => { try { inp.focus(); inp.select(); } catch (_) {} }, 100);
+  openOverlaySheet(el.confirmOverlay);
+  setTimeout(() => { try { inp.focus(); inp.select(); } catch (_) {} }, 120);
 }
 
 function closeConfirm() {
   pendingConfirmAction = null;
   confirmMandatory = false;
   el.confirmCancel.classList.remove('hidden');
-  el.confirmOverlay.classList.add('hidden');
-  el.confirmOverlay.setAttribute('aria-hidden', 'true');
+  closeOverlaySheet(el.confirmOverlay);
   const inp = document.getElementById('confirmInlineInput');
   if (inp) inp.remove();
   const cnt = document.getElementById('confirmInlineCounter');
@@ -1278,6 +1293,18 @@ function bindEvents() {
 
   bindOutsideTapDismiss();
   if (!VIEWER_MODE) bindBalancePad();   // لوحة أرقام الرصيد — جهة الحكم فقط
+
+  // النوافذ المنزلقة تعلو فوق كيبورد الجوال المفتوح (لا يغطي حقول الإدخال)
+  if (window.visualViewport) {
+    const liftSheets = () => {
+      const occ = Math.max(0, window.innerHeight - window.visualViewport.height - window.visualViewport.offsetTop);
+      document.querySelectorAll('.overlay:not(.hidden)').forEach(ov => {
+        ov.style.paddingBottom = occ > 0 ? occ + 'px' : '';
+      });
+    };
+    window.visualViewport.addEventListener('resize', liftSheets);
+    window.visualViewport.addEventListener('scroll', liftSheets);
+  }
 
   setInterval(() => {
     // مزامنة مؤجلة من تبويب آخر (كانت الكتابة جارية وقت وصولها)
@@ -2183,7 +2210,7 @@ async function openViewersList() {
   const overlay = document.getElementById('viewersOverlay');
   const list = document.getElementById('viewersList');
   list.innerHTML = '<div class="mod-empty">جارِ التحميل...</div>';
-  overlay.classList.remove('hidden');
+  openOverlaySheet(overlay);
 
   const privileged = chatIsJudge || isOwner();
   try {
@@ -2259,7 +2286,7 @@ async function openViewersList() {
       if (e.uid) {
         main.style.cursor = 'pointer';
         main.addEventListener('click', () => {
-          overlay.classList.add('hidden');
+          closeOverlaySheet(overlay);
           openUserSheet(e.uid, e.n);
         });
       }
@@ -2375,9 +2402,9 @@ function bindChatEvents() {
   // قائمة المشاهدين الآن (للجميع — والمخوَّلون يرون أزرار الكتم داخلها)
   const viewersOverlay = document.getElementById('viewersOverlay');
   document.getElementById('viewersBtn').addEventListener('click', openViewersList);
-  document.getElementById('viewersCloseBtn').addEventListener('click', () => viewersOverlay.classList.add('hidden'));
+  document.getElementById('viewersCloseBtn').addEventListener('click', () => closeOverlaySheet(viewersOverlay));
   viewersOverlay.addEventListener('click', (e) => {
-    if (e.target === viewersOverlay) viewersOverlay.classList.add('hidden');
+    if (e.target === viewersOverlay) closeOverlaySheet(viewersOverlay);
   });
 }
 
@@ -2489,6 +2516,9 @@ function renderProfileScreen(uid, p) {
   document.getElementById('editNameBtn').classList.toggle('hidden', !profileIsMine || lockedOut);
   document.getElementById('editUserBtn').classList.toggle('hidden', !profileIsMine || lockedOut);
   cam.classList.toggle('hidden', !profileIsMine || lockedOut);
+  // زر ≡ (درج الإعدادات) — على ملفي فقط
+  const menuBtn = document.getElementById('profileMenuBtn');
+  if (menuBtn) menuBtn.classList.toggle('hidden', !profileIsMine || lockedOut);
 
   // النبذة تُخفى في الملف الموقوف (لغير المالك)
   document.querySelector('.profile-bio-label').classList.toggle('hidden', hiddenContent);
@@ -2550,6 +2580,30 @@ async function openProfileScreen(uid) {
 
 function closeSubScreensAll() { closeSubScreens(); }
 
+/* ============ درج الإعدادات الجانبي (أسلوب تيك توك) ============ */
+function openSettingsDrawer() {
+  const d = document.getElementById('settingsDrawer');
+  const b = document.getElementById('drawerBackdrop');
+  if (!d || !b) return;
+  b.classList.remove('hidden');
+  d.setAttribute('aria-hidden', 'false');
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    d.classList.add('open');
+    b.classList.add('open');
+  }));
+}
+
+function closeSettingsDrawer(instant) {
+  const d = document.getElementById('settingsDrawer');
+  const b = document.getElementById('drawerBackdrop');
+  if (!d || !b) return;
+  d.classList.remove('open');
+  b.classList.remove('open');
+  d.setAttribute('aria-hidden', 'true');
+  if (instant === true) { b.classList.add('hidden'); return; }
+  setTimeout(() => { if (!d.classList.contains('open')) b.classList.add('hidden'); }, 320);
+}
+
 /* ============ رفع الأفتار (ضغط تلقائي عبر canvas) ============ */
 function handleAvatarFile(file) {
   if (!file || !file.type || !file.type.startsWith('image/')) return;
@@ -2596,7 +2650,7 @@ function openNameEditor() {
   const input = document.getElementById('nameEditInput');
   const ok = document.getElementById('nameOkBtn');
   const cd = document.getElementById('nameCooldown');
-  overlay.classList.remove('hidden');
+  openOverlaySheet(overlay);
   input.value = getNick() || '';
 
   function tick() {
@@ -2621,7 +2675,7 @@ function openNameEditor() {
 
 function closeNameEditor() {
   clearInterval(nameCooldownTimer);
-  document.getElementById('nameOverlay').classList.add('hidden');
+  closeOverlaySheet(document.getElementById('nameOverlay'));
 }
 
 async function saveNameEdit() {
@@ -2680,7 +2734,7 @@ function openUserEditor() {
   const overlay = document.getElementById('userOverlay');
   const input = document.getElementById('userEditInput');
   const cd = document.getElementById('userCooldown');
-  overlay.classList.remove('hidden');
+  openOverlaySheet(overlay);
   input.value = (myProfile && myProfile.username) || '';
   setUserCheck('idle');
 
@@ -2708,7 +2762,7 @@ function openUserEditor() {
 function closeUserEditor() {
   clearInterval(userCooldownTimer);
   clearTimeout(userCheckTimer);
-  document.getElementById('userOverlay').classList.add('hidden');
+  closeOverlaySheet(document.getElementById('userOverlay'));
 }
 
 function onUserInput() {
@@ -3248,6 +3302,20 @@ function bindProfileEvents() {
     el.listScreen.classList.remove('hidden');
     ensureChatAlive();
   });
+
+  // درج الإعدادات الجانبي (≡ على ملفي)
+  document.getElementById('profileMenuBtn').addEventListener('click', openSettingsDrawer);
+  document.getElementById('drawerBackdrop').addEventListener('click', () => closeSettingsDrawer());
+  document.getElementById('drawerDevBtn').addEventListener('click', () => {
+    closeSettingsDrawer(true);
+    openDevScreen();
+  });
+  document.getElementById('drawerShareBtn').addEventListener('click', () => {
+    closeSettingsDrawer();
+    openShareDialog(profileLink(chatUid(), myProfile), 'profile');
+  });
+  const dv = document.getElementById('drawerVer');
+  if (dv) dv.textContent = 'v' + APP_VERSION;
 
   // الأفتار
   const fileInput = document.getElementById('avatarFile');

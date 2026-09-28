@@ -16,7 +16,7 @@
   <meta property="og:description" content="بث حي + دردشة مباشرة — اضغط للدخول والمشاهدة الآن" />
   <meta property="og:image" content="https://rayanxx509.github.io/509/icon-512.png" />
   <meta property="og:site_name" content="المداقش" />
-  <link rel="stylesheet" href="styles.css?v=44" />
+  <link rel="stylesheet" href="styles.css?v=45" />
   <title>المداقش — نشرة الحكم</title>
 </head>
 <body>
@@ -191,9 +191,12 @@
     </div>
   </section>
 
-  <!-- صفحة الملف الشخصي (لي أو لغيري) -->
+  <!-- صفحة الملف الشخصي (لي أو لغيري) — أسلوب تيك توك -->
   <section id="profileScreen" class="screen hidden" aria-hidden="true">
-    <div class="page-card">
+    <div class="page-card profile-card">
+      <button id="profileMenuBtn" class="profile-menu-btn hidden" type="button" aria-label="الإعدادات">
+        <svg viewBox="0 0 24 24" width="23" height="23" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg>
+      </button>
       <div class="profile-head">
         <button id="profileAvatarBtn" class="profile-avatar" type="button" aria-label="الصورة الشخصية">
           <img id="profileAvatarImg" class="profile-avatar-img hidden" alt="" />
@@ -221,35 +224,6 @@
                 placeholder="اكتب نبذة عنك..." dir="auto"></textarea>
       <div id="profileBioCount" class="profile-bio-count hidden">0/1000</div>
       <p id="profileBioView" class="profile-bio-view">—</p>
-
-      <div id="accountSection" class="account-section hidden">
-        <p class="profile-bio-label">حماية الحساب :</p>
-
-        <div id="accSignedOut" class="hidden">
-          <p class="acc-hint">
-            سجّل بإيميل وكلمة مرور ليتبعك ملفك الشخصي على أي جهاز ولا يضيع
-            حتى لو غيّرت هاتفك أو مسحت بيانات متصفحك.
-          </p>
-          <input id="accEmail" class="edit-input acc-input" type="email" dir="ltr"
-                 placeholder="example@email.com" autocomplete="email" />
-          <input id="accPass" class="edit-input acc-input" type="password" dir="ltr"
-                 placeholder="كلمة المرور ( 6 أحرف فأكثر )" autocomplete="current-password" />
-          <p id="accError" class="edit-hint hidden">—</p>
-          <div class="acc-actions">
-            <button id="accSignupBtn" class="btn-primary" type="button">إنشاء حساب</button>
-            <button id="accLoginBtn" class="btn-secondary" type="button">تسجيل دخول</button>
-          </div>
-          <button id="accForgotBtn" class="acc-forgot" type="button">نسيت كلمة المرور؟</button>
-        </div>
-
-        <div id="accSignedIn" class="hidden">
-          <p class="acc-status">✅ ملفك محمي ومسجّل بـ : <span id="accEmailShow" class="acc-email">—</span></p>
-          <div class="acc-actions">
-            <button id="accLogoutBtn" class="btn-secondary" type="button">تسجيل خروج</button>
-            <button id="accForgotBtn2" class="acc-forgot" type="button">تغيير كلمة المرور</button>
-          </div>
-        </div>
-      </div>
 
       <p id="suspendedNotice" class="suspended-notice hidden">
         ⛔ هذا الملف موقوف مؤقتاً من الإدارة
@@ -279,6 +253,63 @@
       </button>
     </div>
   </section>
+
+  <!-- درج الإعدادات الجانبي (ملفي الشخصي — أسلوب تيك توك) -->
+  <div id="drawerBackdrop" class="drawer-backdrop hidden"></div>
+  <aside id="settingsDrawer" class="settings-drawer" aria-hidden="true">
+    <p class="drawer-title">الإعدادات</p>
+
+    <p class="drawer-sec">حماية الحساب</p>
+    <div class="drawer-card">
+      <div id="accountSection" class="account-section hidden">
+        <div id="accSignedOut" class="hidden">
+          <p class="acc-hint">
+            سجّل بإيميل وكلمة مرور ليتبعك ملفك الشخصي على أي جهاز ولا يضيع
+            حتى لو غيّرت هاتفك أو مسحت بيانات متصفحك.
+          </p>
+          <input id="accEmail" class="edit-input acc-input" type="email" dir="ltr"
+                 placeholder="example@email.com" autocomplete="email" />
+          <input id="accPass" class="edit-input acc-input" type="password" dir="ltr"
+                 placeholder="كلمة المرور ( 6 أحرف فأكثر )" autocomplete="current-password" />
+          <p id="accError" class="edit-hint hidden">—</p>
+          <div class="acc-actions">
+            <button id="accSignupBtn" class="btn-primary" type="button">إنشاء حساب</button>
+            <button id="accLoginBtn" class="btn-secondary" type="button">تسجيل دخول</button>
+          </div>
+          <button id="accForgotBtn" class="acc-forgot" type="button">نسيت كلمة المرور؟</button>
+        </div>
+
+        <div id="accSignedIn" class="hidden">
+          <p class="acc-status">✅ ملفك محمي ومسجّل بـ : <span id="accEmailShow" class="acc-email">—</span></p>
+          <div class="acc-actions">
+            <button id="accLogoutBtn" class="btn-secondary" type="button">تسجيل خروج</button>
+            <button id="accForgotBtn2" class="acc-forgot" type="button">تغيير كلمة المرور</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <p class="drawer-sec">عام</p>
+    <div class="drawer-card">
+      <button id="drawerShareBtn" class="drawer-row" type="button">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12.5v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-5"/><path d="M12 15V4"/><path d="M7.5 8 12 3.5 16.5 8"/></svg>
+        <span>مشاركة صفحتي</span>
+        <span class="drawer-chev"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="14 6 8 12 14 18"/></svg></span>
+      </button>
+      <button id="drawerDevBtn" class="drawer-row" type="button">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.2"/><line x1="12" y1="10.8" x2="12" y2="16.2"/><circle cx="12" cy="7.8" r="0.4" fill="currentColor"/></svg>
+        <span>معلومات المطور</span>
+        <span class="drawer-chev"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="14 6 8 12 14 18"/></svg></span>
+      </button>
+    </div>
+
+    <p class="drawer-sec">قادم</p>
+    <div class="drawer-card">
+      <div class="drawer-row drawer-soon"><span>🧩 مساحة لإعدادات وميزات قادمة…</span></div>
+    </div>
+
+    <p class="drawer-version">المداقش — <span id="drawerVer">v45</span></p>
+  </aside>
 
   <input id="avatarFile" type="file" accept="image/*" class="hidden" />
 
@@ -428,6 +459,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=44"></script>
+  <script src="app.js?v=45"></script>
 </body>
 </html>

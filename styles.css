@@ -1771,42 +1771,92 @@ body.viewer-mode .winner-amount-input {
   box-shadow: 0 0 0 2px var(--winner-green);
 }
 
-/* ======= مربع التأكيد ======= */
+/* ======= النوافذ المنزلقة من الأسفل (أسلوب موحّد 2026) ======= */
 .overlay {
   position: fixed;
   inset: 0;
   background: rgba(0,0,0,0.45);
   display: flex;
-  align-items: center;
+  align-items: flex-end;          /* النافذة تلتصق بالأسفل وتنزلق منه */
   justify-content: center;
-  padding: 20px;
+  padding: 0;
   z-index: 100;
+  opacity: 0;
+  transition: opacity 0.25s ease, padding-bottom 0.2s ease;
 }
+.overlay.open { opacity: 1; }
 
 .confirm-box {
   background: #fff;
-  border-radius: 16px;
-  padding: 24px 20px;
-  max-width: 320px;
   width: 100%;
+  max-width: 480px;
+  border-radius: 20px 20px 0 0;
+  padding: 12px 18px calc(18px + env(safe-area-inset-bottom));
   text-align: center;
-  box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+  box-shadow: 0 -10px 40px rgba(0,0,0,0.22);
+  max-height: 82vh;
+  overflow-y: auto;
+  transform: translateY(100%);
+  transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1);
 }
+.overlay.open .confirm-box { transform: translateY(0); }
+
+/* مقبض علوي صغير — نفس لغة النافذة السفلية للمستخدمين */
+.confirm-box::before {
+  content: '';
+  display: block;
+  width: 40px;
+  height: 4.5px;
+  border-radius: 999px;
+  background: #E4E6EA;
+  margin: 0 auto 14px;
+}
+
 .confirm-title {
   margin: 0 0 8px;
-  font-size: 18px;
+  font-size: 17px;
   font-weight: 800;
 }
 .confirm-text {
-  margin: 0 0 20px;
-  font-size: 15px;
-  color: #444;
+  margin: 0 0 16px;
+  font-size: 14px;
+  color: #6b7280;
+  line-height: 1.8;
 }
+
+/* الأزرار مكدّسة بأسلوب تيك توك: الفعل نص ملوّن بخط فاصل، والإلغاء كبسولة رمادية منفصلة */
 .confirm-actions {
   display: flex;
-  gap: 10px;
-  justify-content: center;
+  flex-direction: column;
+  gap: 0;
+  margin-top: 2px;
 }
+.confirm-actions .btn-primary,
+.confirm-actions .btn-danger {
+  order: 1;
+  width: 100%;
+  background: transparent;
+  border-top: 1px solid #F1F2F4;
+  border-radius: 0;
+  padding: 15px 16px;
+  font-size: 16px;
+}
+.confirm-actions .btn-primary { color: var(--winner-green); }
+.confirm-actions .btn-danger  { color: #E7000B; }
+.confirm-actions .btn-primary:active,
+.confirm-actions .btn-danger:active { background: #F7F8FA; opacity: 1; }
+.confirm-actions .btn-secondary {
+  order: 2;
+  width: 100%;
+  background: #F2F3F5;
+  color: #111;
+  border-radius: 12px;
+  margin-top: 10px;
+  padding: 14px 16px;
+}
+.confirm-actions .btn-secondary:active { background: #E5E7EB; }
+
+/* الأساس العام للأزرار (داخل الصفحات والدرج — تبقى صلبة ملوّنة) */
 .btn-secondary, .btn-danger, .btn-primary {
   flex: 1;
   font-size: 15px;
@@ -1820,6 +1870,160 @@ body.viewer-mode .winner-amount-input {
 .btn-danger:active { opacity: 0.85; }
 .btn-primary { background: var(--winner-green); color: #fff; }
 .btn-primary:active { opacity: 0.9; }
+
+/* ======= توحيد الصفحات الفرعية: خلفية رمادية فاتحة + بطاقات بيضاء ======= */
+#profileScreen, #devScreen, #roundsScreen, #ownerScreen { background: #F1F2F4; }
+.page-card {
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 16px 14px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+
+/* ======= صفحة الملف الشخصي — أسلوب تيك توك ======= */
+.profile-card { position: relative; padding-top: 20px; }
+
+/* زر ≡ (درج الإعدادات) أعلى يسار البطاقة */
+.profile-menu-btn {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: #F2F3F5;
+  color: #111;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+}
+.profile-menu-btn:active { background: #E5E7EB; }
+
+/* الرأس: عمودي متوسط — أفتار كبير ثم الاسم ثم اليوزر (كتيك توك) */
+.profile-head {
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0 2px;
+}
+.profile-avatar {
+  flex: 0 0 auto;
+  width: 96px;
+  height: 96px;
+}
+.profile-id { width: 100%; }
+.profile-name-row, .profile-user-row { justify-content: center; }
+.profile-name { font-size: 21px; }
+
+/* النبذة: بطاقة رمادية ناعمة متوسطة */
+.profile-bio-label {
+  text-align: center;
+  color: #8A8F98;
+  font-size: 12.5px;
+  margin-top: 10px;
+}
+.profile-bio-view {
+  text-align: center;
+  background: #F7F8FA;
+  border-radius: 12px;
+  padding: 12px 14px;
+}
+.profile-bio-edit {
+  background: #F7F8FA;
+  border: none;
+  border-radius: 12px;
+}
+.profile-bio-edit:focus { outline: 2px solid var(--winner-green); }
+
+/* ======= درج الإعدادات الجانبي (أسلوب تيك توك) ======= */
+.drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.35);
+  z-index: 80;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+.drawer-backdrop.open { opacity: 1; }
+
+.settings-drawer {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 81;
+  width: min(84%, 340px);
+  background: #F5F6F8;
+  padding: calc(16px + env(safe-area-inset-top)) 14px calc(24px + env(safe-area-inset-bottom));
+  overflow-y: auto;
+  transform: translateX(-105%);
+  transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+  box-shadow: 6px 0 30px rgba(0,0,0,0.18);
+  overscroll-behavior: contain;
+}
+.settings-drawer.open { transform: translateX(0); }
+
+.drawer-title {
+  font-size: 18px;
+  font-weight: 800;
+  margin: 2px 4px 4px;
+  text-align: right;
+}
+.drawer-sec {
+  font-size: 12px;
+  font-weight: 700;
+  color: #8A8F98;
+  margin: 16px 6px 6px;
+  text-align: right;
+}
+.drawer-card {
+  background: #ffffff;
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+}
+.drawer-card .account-section {
+  border-top: none;
+  margin-top: 0;
+  padding: 12px;
+}
+.drawer-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 13.5px 12px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #111;
+  text-align: right;
+  background: #fff;
+}
+.drawer-row:active { background: #F5F6F8; }
+.drawer-row + .drawer-row { border-top: 1px solid #F1F2F4; }
+.drawer-row svg { flex: 0 0 auto; }
+.drawer-row > span { min-width: 0; }
+.drawer-chev {
+  margin-inline-start: auto;
+  color: #C2C6CD;
+  display: flex;
+  align-items: center;
+}
+.drawer-soon {
+  color: #9AA0A8;
+  font-weight: 600;
+  font-size: 13px;
+  cursor: default;
+}
+.drawer-soon:active { background: #fff; }
+.drawer-version {
+  text-align: center;
+  color: #A6AAB1;
+  font-size: 12px;
+  font-weight: 700;
+  margin-top: 20px;
+}
 
 /* ======= ملاءمة للشاشات الأصغر ======= */
 @media (max-width: 380px) {
