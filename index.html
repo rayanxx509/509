@@ -16,7 +16,7 @@
   <meta property="og:description" content="بث حي + دردشة مباشرة — اضغط للدخول والمشاهدة الآن" />
   <meta property="og:image" content="https://rayanxx509.github.io/509/icon-512.png" />
   <meta property="og:site_name" content="المداقش" />
-  <link rel="stylesheet" href="styles.css?v=40" />
+  <link rel="stylesheet" href="styles.css?v=41" />
   <title>المداقش — نشرة الحكم</title>
 </head>
 <body>
@@ -389,6 +389,33 @@
     </div>
   </section>
 
+  <!-- لوحة أرقام الرصيد — كيبورد التطبيق الخاص (تنبثق للحكم عند لمس رصيد لاعب) -->
+  <div id="balancePad" class="balance-pad hidden" aria-hidden="true">
+    <div class="pad-preview">
+      <span id="padWho" class="pad-who">—</span>
+      <span class="pad-result-wrap">
+        <span id="padOp" class="pad-op"></span>
+        <span id="padCalc" class="pad-calc dim">اكتب الرقم…</span>
+      </span>
+    </div>
+    <div class="pad-grid">
+      <button type="button" class="pad-key" data-k="1">1</button>
+      <button type="button" class="pad-key" data-k="2">2</button>
+      <button type="button" class="pad-key" data-k="3">3</button>
+      <button type="button" class="pad-key pad-func" data-k="back" aria-label="مسح آخر رقم">⌫</button>
+      <button type="button" class="pad-key" data-k="4">4</button>
+      <button type="button" class="pad-key" data-k="5">5</button>
+      <button type="button" class="pad-key" data-k="6">6</button>
+      <button type="button" class="pad-key pad-plus" data-k="plus" aria-label="إضافة على الرصيد">+</button>
+      <button type="button" class="pad-key" data-k="7">7</button>
+      <button type="button" class="pad-key" data-k="8">8</button>
+      <button type="button" class="pad-key" data-k="9">9</button>
+      <button type="button" class="pad-key pad-minus" data-k="minus" aria-label="خصم من الرصيد">−</button>
+      <button type="button" class="pad-key pad-zero" data-k="0">0</button>
+      <button type="button" class="pad-key pad-done" data-k="done">تم ✓</button>
+    </div>
+  </div>
+
   <!-- مربع تأكيد المسح -->
   <div id="confirmOverlay" class="overlay hidden" aria-hidden="true">
     <div class="confirm-box" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
@@ -401,6 +428,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=40"></script>
+  <script src="app.js?v=41"></script>
 </body>
 </html>

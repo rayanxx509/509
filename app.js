@@ -1,21 +1,22 @@
 'use strict';
 
 /* ====================================================================
-   المداقش — نشرة الحكم  (v7)
+   المداقش — نشرة الحكم  (v41)
    - نسبة مئوية من مبلغ الفوز لتحديد اللون + خلفيات مصوّرة مخصصة
    - رصيد سالب → خلفية "السالب" + نص أحمر ساطع
-   - إدخال الرصيد تراكمي (يُضاف/يُخصم على الرصيد الحالي) + زر − للخصم
+   - لوحة أرقام خاصة للرصيد: رقم بلا علامة = استبدال، +ن = إضافة، −ن = خصم
    - إدخال مضمّن بدون نوافذ منبثقة
    - ترتيب تلقائي حي: الأعلى رصيداً فوق، الحقول بلا اسم رمادية بالأسفل
-   - تراجع/تقدم عام (زران حول حقل مبلغ الفوز) لآخر تعديلات الرصيد
+   - تراجع/تقدم عام (بحد 10 خطوات احتياطية متتالية ثم يبهت الزر)
    - شاشة فوز بنظام الإقرار + زر "الفائز" اليدوي
    ==================================================================== */
 
-const APP_VERSION    = 40;             // يجب أن يطابق version.json و ?v= في index.html
+const APP_VERSION    = 41;             // يجب أن يطابق version.json و ?v= في index.html
 const PLAYERS_COUNT  = 10;
 const STORAGE_KEY    = 'madagish.v1';
 const REFRESH_MS     = 3000;
 const ACTION_LOG_MAX = 200;
+const UNDO_DEPTH_MAX = 10;             // أقصى تراجع متتالٍ من آخر نقطة — بعده يبهت زر التراجع
 const UPDATE_CHECK_MS = 60000;         // فحص التحديثات كل دقيقة
 
 /* عدّاد المتصلين — رابط قاعدة Firebase Realtime Database (BLUEPRINT §12) */
@@ -105,19 +106,6 @@ function parseNonNegativeInt(str) {
   const n = parseInt(clean, 10);
   if (Number.isNaN(n)) return null;
   return n;
-}
-
-// يقبل الأرقام السالبة والموجبة — للاستخدام في حقل الرصيد
-function parseSignedInt(str) {
-  if (typeof str !== 'string') return null;
-  const trimmed = str.trim();
-  if (trimmed === '') return null;
-  const isNeg = /^-/.test(trimmed);
-  const digits = trimmed.replace(/\D/g, '');
-  if (digits === '') return null;
-  const n = parseInt(digits, 10);
-  if (Number.isNaN(n)) return null;
-  return isNeg ? -n : n;
 }
 
 function playerBalance(p) {
@@ -322,8 +310,13 @@ function describeAction(action, useFrom) {
   return '';
 }
 
+/* عدد خطوات التراجع المستهلكة من آخر نقطة — حد الأمان UNDO_DEPTH_MAX */
+function undoStepsUsed() {
+  return (state.actionLog.length - 1) - state.actionIndex;
+}
+
 function globalUndo() {
-  if (state.actionIndex < 0) return;
+  if (state.actionIndex < 0 || undoStepsUsed() >= UNDO_DEPTH_MAX) return;
   const action = state.actionLog[state.actionIndex];
   showConfirm({
     title: 'تأكيد التراجع',
@@ -365,7 +358,10 @@ function globalRedo() {
 }
 
 function updateGlobalHistoryButtons() {
-  if (el.globalUndoBtn) el.globalUndoBtn.disabled = state.actionIndex < 0;
+  if (el.globalUndoBtn) {
+    // يبهت بعد استهلاك 10 خطوات تراجع متتالية — أي تعديل جديد يعيد شحن الرصيد
+    el.globalUndoBtn.disabled = state.actionIndex < 0 || undoStepsUsed() >= UNDO_DEPTH_MAX;
+  }
   if (el.globalRedoBtn) el.globalRedoBtn.disabled = state.actionIndex >= state.actionLog.length - 1;
 }
 
@@ -399,6 +395,7 @@ function computeColors() {
 
 /* ============ الترتيب التلقائي (الأعلى رصيداً فوق) ============ */
 function isEditingInsideList() {
+  if (padIdx !== null) return true;   // لوحة الأرصدة مفتوحة — لا إعادة ترتيب تحت أصابع الحكم
   const a = document.activeElement;
   return a && a instanceof HTMLInputElement && a.closest && a.closest('#playersList');
 }
@@ -522,44 +519,37 @@ function renderPlayers() {
     if (VIEWER_MODE) { nameInput.setAttribute('readonly', ''); nameInput.setAttribute('tabindex', '-1'); }
     else bindNameInput(nameInput, i);
 
-    // 2) حقل الرصيد (أقصى اليسار مع زر الخصم)
+    // 2) حقل الرصيد (أقصى اليسار) — عرض فقط، ولمسه يفتح لوحة الأرقام الخاصة
     const balanceInput = document.createElement('input');
     balanceInput.type = 'tel';
     balanceInput.className = 'player-input balance-input';
-    balanceInput.setAttribute('inputmode', 'numeric');
-    balanceInput.setAttribute('pattern', '[0-9]*');
-    balanceInput.setAttribute('enterkeyhint', 'done');
+    balanceInput.setAttribute('inputmode', 'none');    // لا كيبورد نظام إطلاقاً — لوحتنا فقط
+    balanceInput.setAttribute('readonly', '');
+    balanceInput.setAttribute('tabindex', '-1');
     balanceInput.setAttribute('autocomplete', 'off');
     balanceInput.placeholder = balance === null ? 'الرصيد' : '';
     balanceInput.dataset.idx = String(i);
     balanceInput.dataset.kind = 'balance';
     balanceInput.value = balance === null ? '' : formatAmount(balance);
-    if (VIEWER_MODE) { balanceInput.setAttribute('readonly', ''); balanceInput.setAttribute('tabindex', '-1'); }
-    else bindBalanceInput(balanceInput, i);
-
-    // 3) زر الخصم (−) — أقصى اليسار
-    const subBtn = document.createElement('button');
-    subBtn.type = 'button';
-    subBtn.className = 'history-btn subtract-btn';
-    subBtn.textContent = '−';
-    subBtn.setAttribute('aria-label', 'خصم من الرصيد');
-    subBtn.addEventListener('click', (e) => {
-      e.preventDefault();
-      balanceInput.dataset.mode = 'subtract';
-      balanceInput.focus();
-    });
+    if (!VIEWER_MODE) {
+      balanceInput.addEventListener('pointerdown', (e) => {
+        e.preventDefault();   // يمنع التركيز وفتح كيبورد النظام
+        // إن كان الحكم يكتب اسماً الآن: أغلق كيبورده واحفظ الاسم (blur يشغّل الحفظ)
+        const a = document.activeElement;
+        if (a && a !== document.body && typeof a.blur === 'function') a.blur();
+      });
+      balanceInput.addEventListener('click', () => openBalancePad(i));
+    }
 
     li.appendChild(nameInput);
-    // حقول الرصيد وزر − تظهر فقط بعد إدخال رأس المال
-    if (state.capitalSet) {
-      li.appendChild(balanceInput);
-      li.appendChild(subBtn);
-    }
+    // حقل الرصيد يظهر فقط بعد إدخال رأس المال
+    if (state.capitalSet) li.appendChild(balanceInput);
     list.appendChild(li);
   }
 
   applyRowOrder();
   fitAllNameInputs();
+  if (padIdx !== null) markPadTarget();   // إعادة رسم أثناء لوحة مفتوحة: أعد تمييز الحقل المستهدف
 }
 
 function bindNameInput(input, idx) {
@@ -586,74 +576,213 @@ function bindNameInput(input, idx) {
   });
 }
 
-function bindBalanceInput(input, idx) {
-  input.addEventListener('focus', () => {
-    const p = state.players[idx];
-    input.value = '';
-    const cur = playerBalance(p);
-    const isSub = input.dataset.mode === 'subtract';
-    if (cur === null) {
-      input.placeholder = 'أدخل الرصيد';
-    } else if (isSub) {
-      input.placeholder = `− من ${formatAmount(cur)} — اكتب المخصوم`;
-    } else {
-      input.placeholder = `+ ${formatAmount(cur)} — اكتب المضاف`;
+/* ====================================================================
+   لوحة أرقام الرصيد — كيبورد التطبيق الخاص (جهة الحكم فقط)
+   رقم بلا علامة = استبدال الرصيد | +ن = إضافة | −ن = خصم | 0 وحده = −1
+   الاعتماد حصرياً بزر "تم" — واللمس خارج اللوحة إلغاء بلا أي تغيير
+   ==================================================================== */
+const PAD_MAX_DIGITS = 7;
+let padIdx   = null;   // اللاعب المفتوح في اللوحة (null = مغلقة)
+let padEntry = '';     // الأرقام المكتوبة
+let padSign  = null;   // null = استبدال | '+' إضافة | '-' خصم
+
+function padEl() { return document.getElementById('balancePad'); }
+
+/* تمييز حقل الرصيد الجاري تعديله (حلقة بيضاء + خلفية أدكن) */
+function markPadTarget() {
+  document.querySelectorAll('.balance-input').forEach(inp => {
+    const i = parseInt(inp.dataset.idx, 10);
+    inp.classList.toggle('pad-editing', padIdx !== null && i === padIdx);
+  });
+}
+
+/* زر العلامة المفعّلة يمتلئ بلونه الكامل (أخضر/أحمر) */
+function paintPadSigns() {
+  const pad = padEl();
+  if (!pad) return;
+  const plus  = pad.querySelector('[data-k="plus"]');
+  const minus = pad.querySelector('[data-k="minus"]');
+  if (plus)  plus.classList.toggle('armed', padSign === '+');
+  if (minus) minus.classList.toggle('armed', padSign === '-');
+}
+
+/* شريط المعاينة الحية: اسم اللاعب ورصيده + العملية والناتج قبل الاعتماد */
+function updatePadPreview() {
+  if (padIdx === null) return;
+  const whoEl  = document.getElementById('padWho');
+  const opEl   = document.getElementById('padOp');
+  const calcEl = document.getElementById('padCalc');
+  if (!whoEl || !opEl || !calcEl) return;
+
+  const cur = playerBalance(state.players[padIdx]);
+  whoEl.textContent = 'رصيد ' + playerLabel(padIdx) + ' : ' + (cur === null ? '—' : formatAmount(cur));
+
+  const hasNum = padEntry !== '';
+  const n = hasNum ? parseInt(padEntry, 10) : null;
+  const base = cur === null ? 0 : cur;
+
+  if (!hasNum && padSign === null) {
+    opEl.textContent = '';
+    opEl.className = 'pad-op';
+    calcEl.className = 'pad-calc dim';
+    calcEl.textContent = 'اكتب الرقم…';
+    return;
+  }
+  calcEl.className = 'pad-calc';
+  if (padSign === '+') {
+    opEl.textContent = 'إضافة';
+    opEl.className = 'pad-op add';
+    calcEl.textContent = hasNum ? `+${padEntry} = ${formatAmount(base + n)}` : '+';
+  } else if (padSign === '-') {
+    opEl.textContent = 'خصم';
+    opEl.className = 'pad-op sub';
+    calcEl.textContent = hasNum ? `−${padEntry} = ${formatAmount(base - n)}` : '−';
+  } else if (n === 0) {
+    // قانون اللعبة: لا وجود للصفر — 0 وحده يعني أن اللاعب صار سالب 1
+    opEl.textContent = 'قانون الصفر';
+    opEl.className = 'pad-op zero';
+    calcEl.textContent = `0 = ${formatAmount(-1)}`;
+  } else {
+    opEl.textContent = 'استبدال';
+    opEl.className = 'pad-op set';
+    calcEl.textContent = `${padEntry} = ${formatAmount(n)}`;
+  }
+}
+
+function openBalancePad(idx) {
+  if (VIEWER_MODE) return;
+  // أغلق أي كيبورد نظام مفتوح (حقل اسم مثلاً) — الإغلاق يحفظ الاسم تلقائياً
+  try {
+    const a = document.activeElement;
+    if (a && a !== document.body && typeof a.blur === 'function') a.blur();
+  } catch (_) {}
+  padIdx = idx;
+  padEntry = '';
+  padSign = null;
+  markPadTarget();
+  paintPadSigns();
+  updatePadPreview();
+  const pad = padEl();
+  if (!pad) return;
+  pad.classList.remove('hidden');
+  pad.setAttribute('aria-hidden', 'false');
+  requestAnimationFrame(() => requestAnimationFrame(() => pad.classList.add('open')));
+  // إحضار صف اللاعب لمنتصف الشاشة حتى لا تغطيه اللوحة
+  const row = document.querySelector(`.player-row[data-idx="${idx}"]`);
+  if (row) { try { row.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (_) {} }
+}
+
+function closeBalancePad(instant) {
+  padIdx = null;
+  padEntry = '';
+  padSign = null;
+  markPadTarget();
+  paintPadSigns();
+  const pad = padEl();
+  if (!pad) return;
+  pad.classList.remove('open');
+  pad.setAttribute('aria-hidden', 'true');
+  if (instant === true) { pad.classList.add('hidden'); return; }
+  setTimeout(() => { if (padIdx === null) pad.classList.add('hidden'); }, 260);
+}
+
+function handlePadKey(k) {
+  if (padIdx === null) return;
+  if (k === 'done') { commitPad(); return; }
+  if (k === 'back') {
+    if (padEntry !== '') padEntry = padEntry.slice(0, -1);
+    else padSign = null;                       // لا أرقام؟ امسح العلامة
+  } else if (k === 'plus') {
+    padSign = padSign === '+' ? null : '+';    // ضغطة ثانية تلغيها (رجوع للاستبدال)
+  } else if (k === 'minus') {
+    padSign = padSign === '-' ? null : '-';
+  } else if (k >= '0' && k <= '9') {
+    if (padEntry === '0') {
+      if (k !== '0') padEntry = k;             // "0" ثم رقم: الرقم يحل محله
+    } else if (padEntry.length < PAD_MAX_DIGITS) {
+      padEntry += k;
     }
-    setTimeout(() => {
-      try { input.setSelectionRange(0, 0); } catch (_) {}
-    }, 30);
+  }
+  paintPadSigns();
+  updatePadPreview();
+}
+
+function commitPad() {
+  const idx = padIdx;
+  if (idx === null) { closeBalancePad(); return; }
+  if (padEntry === '') { closeBalancePad(); return; }   // بلا أرقام = إلغاء صامت
+  const p = state.players[idx];
+  const cur = playerBalance(p);
+  const n = parseInt(padEntry, 10);
+  const base = cur === null ? 0 : cur;
+
+  let newBalance, toastMsg;
+  if (padSign === '+') {
+    if (n === 0) { closeBalancePad(); return; }         // +0 لا يغيّر شيئاً
+    newBalance = base + n;
+    toastMsg = `أُضيف ${n} — الرصيد ${formatAmount(newBalance)}`;
+  } else if (padSign === '-') {
+    if (n === 0) { closeBalancePad(); return; }
+    newBalance = base - n;
+    toastMsg = `خُصم ${n} — الرصيد ${formatAmount(newBalance)}`;
+  } else if (n === 0) {
+    // قانون اللعبة: لا وجود للصفر — إدخال 0 يعني أن اللاعب صار سالب 1
+    newBalance = -1;
+    toastMsg = `القانون: 0 = الرصيد ${formatAmount(-1)}`;
+  } else {
+    newBalance = n;                                     // استبدال مباشر
+    toastMsg = `استُبدل الرصيد — صار ${formatAmount(newBalance)}`;
+  }
+
+  if (newBalance === cur) {
+    // نفس القيمة الحالية = لا تغيير فعلياً: لا جولة ولا سجل تراجع
+    closeBalancePad();
+    showToast(`رصيد ${playerLabel(idx)} كما هو ${formatAmount(cur)} — بدون تغيير`);
+    return;
+  }
+
+  p.balance = newBalance;
+  const action = { type: 'balance', idx, from: cur, to: newBalance };
+  recordAction(action);
+  action.logRef = addRoundLine(idx, newBalance);   // سطر في دفتر الجولات (أو null لحقل بلا اسم قط)
+  showToast(toastMsg);
+  state.winnerShown = false;
+  saveState();
+  closeBalancePad();
+  refreshAfterBalanceChange();
+  renderRoundsIfOpen();
+}
+
+function bindBalancePad() {
+  const pad = padEl();
+  if (!pad) return;
+
+  // لمس اللوحة لا يسرق التركيز من شيء ولا يفتح كيبورد النظام
+  pad.addEventListener('pointerdown', (e) => e.preventDefault());
+  pad.addEventListener('click', (e) => {
+    const btn = e.target.closest('.pad-key');
+    if (btn && btn.dataset.k) handlePadKey(btn.dataset.k);
   });
 
-  input.addEventListener('blur', () => {
-    const p = state.players[idx];
-    const raw = input.value.trim();
-    let delta = parseSignedInt(raw);
-    const cur = playerBalance(p);
-    const isSub = input.dataset.mode === 'subtract';
-    delete input.dataset.mode;
-
-    if (delta === null) {
-      input.value = cur === null ? '' : formatAmount(cur);
-      input.placeholder = cur === null ? 'الرصيد' : '';
-      return;
-    }
-
-    let newBalance;
-    if (delta === 0) {
-      // قانون اللعبة: لا وجود للصفر — إدخال 0 يعني أن اللاعب صار سالب 1
-      newBalance = -1;
-    } else {
-      if (isSub && delta > 0) delta = -delta;
-      newBalance = (cur === null ? 0 : cur) + delta;
-    }
-    p.balance = newBalance;
-    const action = { type: 'balance', idx, from: cur, to: newBalance };
-    recordAction(action);
-    action.logRef = addRoundLine(idx, newBalance);   // سطر في دفتر الجولات (أو null لحقل بلا اسم قط)
-
-    // إشعار عابر يوضح للحكم ماذا حدث بالضبط (يكشف الأخطاء فوراً)
-    if (delta === 0) {
-      showToast(`القانون: 0 = الرصيد ${formatAmount(-1)}`);
-    } else if (delta > 0) {
-      showToast(`أُضيف ${delta} — الرصيد ${formatAmount(newBalance)}`);
-    } else {
-      showToast(`خُصم ${-delta} — الرصيد ${formatAmount(newBalance)}`);
-    }
-
-    state.winnerShown = false;
-    saveState();
-
-    // تحديث في المكان بدون إعادة رسم كامل
-    input.value = formatAmount(newBalance);
-    input.placeholder = '';
-    applyColorsToRows();
-    updateGlobalHistoryButtons();
-    updateManualWinnerBtnState();
-    checkWinner();
+  // اللمس خارج اللوحة = إلغاء بلا أي تغيير (لمس رصيد لاعب آخر = انتقال مباشر إليه)
+  document.addEventListener('pointerdown', (e) => {
+    if (padIdx === null) return;
+    if (pad.contains(e.target)) return;
+    const t = e.target;
+    if (t instanceof HTMLElement && t.classList && t.classList.contains('balance-input')) return;
+    closeBalancePad();
   });
 
-  input.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+  // دعم كيبورد الكمبيوتر الفعلي أثناء فتح اللوحة (أرقام، + −، مسح، إدخال، هروب)
+  document.addEventListener('keydown', (e) => {
+    if (padIdx === null) return;
+    if (!el.confirmOverlay.classList.contains('hidden')) return;
+    if (e.key >= '0' && e.key <= '9') { e.preventDefault(); handlePadKey(e.key); }
+    else if (e.key === '+') { e.preventDefault(); handlePadKey('plus'); }
+    else if (e.key === '-') { e.preventDefault(); handlePadKey('minus'); }
+    else if (e.key === 'Backspace') { e.preventDefault(); handlePadKey('back'); }
+    else if (e.key === 'Enter') { e.preventDefault(); handlePadKey('done'); }
+    else if (e.key === 'Escape') { e.preventDefault(); closeBalancePad(); }
   });
 }
 
@@ -781,6 +910,7 @@ function showWinner(idx) {
   const p = state.players[idx];
   el.winnerName.textContent = p.name || 'لاعب بدون اسم';
   el.winnerAmountDisplay.textContent = formatAmount(playerBalance(p));
+  closeBalancePad(true);   // شاشة الفوز غمر كامل — لا لوحة أرقام تحتها
   closeSubScreens();
   el.listScreen.classList.add('hidden');
   el.winnerScreen.classList.remove('hidden');
@@ -1076,6 +1206,7 @@ function askReset() {
 }
 
 function resetAll() {
+  closeBalancePad(true);
   state.winnerAmount = null;
   for (let i = 0; i < PLAYERS_COUNT; i++) {
     state.players[i].name = null;
@@ -1146,10 +1277,11 @@ function bindEvents() {
   bindProfileEvents();
 
   bindOutsideTapDismiss();
+  if (!VIEWER_MODE) bindBalancePad();   // لوحة أرقام الرصيد — جهة الحكم فقط
 
   setInterval(() => {
     // مزامنة مؤجلة من تبويب آخر (كانت الكتابة جارية وقت وصولها)
-    if (pendingStorageSync && !(document.activeElement instanceof HTMLInputElement)) {
+    if (pendingStorageSync && padIdx === null && !(document.activeElement instanceof HTMLInputElement)) {
       pendingStorageSync = false;
       reloadFromStorage();
       return;
@@ -1168,6 +1300,7 @@ function bindEvents() {
 let pendingStorageSync = false;
 
 function reloadFromStorage() {
+  closeBalancePad(true);   // لا نُبقي لوحة مفتوحة على بيانات صارت قديمة
   state.winnerAmount = null;
   state.players = Array.from({ length: PLAYERS_COUNT }, newPlayer);
   state.actionLog = [];
@@ -1184,8 +1317,8 @@ function reloadFromStorage() {
 function bindCrossTabSync() {
   window.addEventListener('storage', (e) => {
     if (e.key !== STORAGE_KEY) return;
-    // لا نقاطع الحكم وهو يكتب — نؤجل للمزامنة عند أول فرصة
-    if (document.activeElement instanceof HTMLInputElement) {
+    // لا نقاطع الحكم وهو يكتب أو يستخدم لوحة الأرصدة — نؤجل للمزامنة عند أول فرصة
+    if (padIdx !== null || document.activeElement instanceof HTMLInputElement) {
       pendingStorageSync = true;
       return;
     }
@@ -1198,6 +1331,7 @@ function startUpdateChecker() {
   function isUserBusy() {
     const a = document.activeElement;
     if (a && a instanceof HTMLInputElement) return true;                     // يكتب الآن
+    if (padIdx !== null) return true;                                        // لوحة الأرصدة مفتوحة
     if (!el.confirmOverlay.classList.contains('hidden')) return true;        // نافذة تأكيد مفتوحة
     return false;
   }

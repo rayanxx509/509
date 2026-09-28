@@ -272,40 +272,6 @@ button {
   font-size: 11px;
 }
 
-/* زر الخصم (−): كبسولة صغيرة */
-.subtract-btn {
-  flex: 0 0 34px;
-  height: 38px;
-  font-size: 24px;
-  font-weight: 900;
-  color: #fff;
-  background: rgba(0,0,0,0.30);
-  border-radius: 9px;
-  border-right: none !important;
-  text-shadow: 0 1px 2px rgba(0,0,0,0.6);
-}
-.subtract-btn:active { background: rgba(0,0,0,0.50); }
-
-/* أزرار التراجع/التقدم */
-.history-btn {
-  flex: 0 0 38px;
-  border-right: 1px solid rgba(0,0,0,0.15);
-  font-size: 20px;
-  font-weight: 700;
-  color: inherit;
-  padding: 0;
-  text-align: center;
-  line-height: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.history-btn:disabled {
-  opacity: 0.30;
-  pointer-events: none;
-  cursor: default;
-}
-
 /* ======= تلوين الحقل: صور خلفية مخصصة (تتكيّف مع كل المقاسات) ======= */
 /* background-size: cover يجعل الصورة تغطي الحقل وتقتصّ بأناقة على أي شاشة */
 .player-row[data-color]:not([data-color="gray"]) {
@@ -361,8 +327,7 @@ button {
   border-right-color: rgba(0,0,0,0.20);
 }
 /* الحقول الفارغة (رمادية): كبسولات فاتحة هادئة، نص أسود عادي بدون ظل */
-.player-row[data-color="gray"] .player-input,
-.player-row[data-color="gray"] .subtract-btn {
+.player-row[data-color="gray"] .player-input {
   background: rgba(0,0,0,0.06);
   color: #1a1a1a;
   text-shadow: none;
@@ -502,7 +467,7 @@ body.viewer-mode #resetBtn,
 body.viewer-mode #capitalBtn,
 body.viewer-mode #globalUndoBtn,
 body.viewer-mode #globalRedoBtn,
-body.viewer-mode .subtract-btn {
+body.viewer-mode #balancePad {
   display: none !important;
 }
 body.viewer-mode .player-input,
@@ -1675,6 +1640,134 @@ body.viewer-mode .winner-amount-input {
   transform: translateY(0);
 }
 
+/* ======= لوحة أرقام الرصيد — كيبورد التطبيق الخاص (أسلوب آيفون) ======= */
+.balance-pad {
+  position: fixed;
+  right: 0;
+  left: 0;
+  bottom: 0;
+  z-index: 62;                       /* فوق الشريط السفلي (60) وتحت شاشة الفوز (65) */
+  background: rgba(243,244,246,0.97);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  border-top: 1px solid #d1d5db;
+  box-shadow: 0 -6px 24px rgba(0,0,0,0.12);
+  padding: 8px 10px calc(10px + env(safe-area-inset-bottom));
+  transform: translateY(105%);
+  transition: transform 0.26s cubic-bezier(0.32, 0.72, 0, 1);
+}
+.balance-pad.open { transform: translateY(0); }
+
+/* شريط المعاينة الحية: [رصيد اللاعب الحالي] ..... [العملية والناتج] */
+.pad-preview {
+  max-width: 480px;
+  margin: 0 auto 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 2px 4px;
+  min-height: 30px;
+}
+.pad-who {
+  font-size: 13.5px;
+  font-weight: 800;
+  color: #374151;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.pad-result-wrap {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.pad-op {
+  font-size: 11px;
+  font-weight: 800;
+  border-radius: 999px;
+  padding: 3px 10px;
+  white-space: nowrap;
+}
+.pad-op:empty { display: none; }
+.pad-op.set  { background: #DBEAFE; color: #1D4ED8; }   /* استبدال */
+.pad-op.add  { background: #DCFCE7; color: #15803D; }   /* إضافة */
+.pad-op.sub  { background: #FEE2E2; color: #B91C1C; }   /* خصم */
+.pad-op.zero { background: #FEF3C7; color: #92400E; }   /* قانون الصفر */
+.pad-calc {
+  font-size: 16px;
+  font-weight: 800;
+  color: #111;
+  direction: ltr;
+  unicode-bidi: embed;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.pad-calc.dim {
+  color: #9ca3af;
+  font-size: 13px;
+  font-weight: 600;
+  direction: rtl;
+}
+
+/* شبكة المفاتيح: 4 أعمدة — الأرقام يسار وعمود العمليات يمين (كالآلة الحاسبة) */
+.pad-grid {
+  direction: ltr;
+  max-width: 480px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 7px;
+}
+.pad-key {
+  height: 50px;
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow: 0 1px 0 rgba(0,0,0,0.28);
+  font-size: 23px;
+  font-weight: 700;
+  color: #111;
+  font-variant-numeric: tabular-nums;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+  transition: background 0.08s, transform 0.05s;
+}
+.pad-key:active { background: #d7dade; transform: scale(0.97); }
+.pad-func { background: #dfe2e7; font-size: 20px; }
+.pad-func:active { background: #c9cdd4; }
+.pad-plus  { background: #E5F6EC; color: #15803D; font-size: 27px; font-weight: 800; }
+.pad-minus { background: #FDEBEB; color: #C62828; font-size: 27px; font-weight: 800; }
+/* العلامة المفعّلة تمتلئ بلونها الكامل — الحكم يرى فوراً أي عملية مسلَّحة */
+.pad-plus.armed,
+.pad-plus.armed:active  { background: #16A34A; color: #fff; }
+.pad-minus.armed,
+.pad-minus.armed:active { background: #DC2626; color: #fff; }
+.pad-zero { grid-column: span 2; }
+.pad-done {
+  grid-column: span 2;
+  background: var(--winner-green);
+  color: #fff;
+  font-size: 18px;
+  font-weight: 800;
+}
+.pad-done:active { background: #128a3e; }
+
+/* حقل الرصيد الجاري تعديله: حلقة بيضاء + خلفية أدكن (يعرف الحكم أين يكتب) */
+.player-input.pad-editing {
+  background: rgba(0,0,0,0.55);
+  box-shadow: 0 0 0 2px #ffffff;
+}
+.player-row[data-color="gray"] .player-input.pad-editing {
+  background: rgba(0,0,0,0.14);
+  box-shadow: 0 0 0 2px var(--winner-green);
+}
+
 /* ======= مربع التأكيد ======= */
 .overlay {
   position: fixed;
@@ -1731,6 +1824,5 @@ body.viewer-mode .winner-amount-input {
   .winner-amount-input { font-size: 22px; }
   .player-input { font-size: 15px; padding: 0 10px; }
   .balance-input { flex: 0 0 76px; font-size: 16px; padding: 0 6px; }
-  .history-btn { flex: 0 0 32px; font-size: 18px; }
-  .subtract-btn { flex: 0 0 28px; font-size: 22px; }
+  .pad-key { height: 46px; font-size: 21px; }
 }
