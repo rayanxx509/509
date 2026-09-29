@@ -2152,6 +2152,178 @@ body.viewer-mode .winner-amount-input {
 }
 .confirm-actions .btn-danger.solid:active { background: #B91C1C; opacity: 1; }
 
+/* اسم المُبلِّغ قابل للضغط — ينقل لملفه */
+.report-reporter {
+  color: #2563EB;
+  text-decoration: underline;
+  cursor: pointer;
+  font-weight: 800;
+}
+
+/* ======= شارات الشريط السفلي ======= */
+.bar-badge {
+  position: absolute;
+  top: 0;
+  left: 4px;
+  z-index: 2;
+  background: #DC2626;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  border-radius: 999px;
+  padding: 1px 5px;
+  min-width: 17px;
+  text-align: center;
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.35);
+  pointer-events: none;
+}
+.bar-warn {
+  position: absolute;
+  top: 0;
+  left: 6px;
+  z-index: 2;
+  pointer-events: none;
+  filter: drop-shadow(0 1px 2px rgba(0,0,0,0.3));
+}
+
+/* ======= زر ونصوص التحذير ======= */
+.warn-notice {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  background: #ffffff;
+  border: 2px solid #DC2626;
+  color: #DC2626;
+  font-size: 13.5px;
+  font-weight: 800;
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin-top: 12px;
+}
+.warn-notice:active { background: #FEF2F2; }
+.warn-text {
+  background: #FEF2F2;
+  border: 1px solid #FECACA;
+  border-radius: 12px;
+  padding: 12px 14px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #7F1D1D;
+  line-height: 2;
+  text-align: right;
+  margin: 0 0 8px;
+  user-select: text;
+  -webkit-user-select: text;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.warn-copy {
+  background: #F2F3F5;
+  color: #374151;
+  font-size: 12.5px;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 8px 16px;
+  margin-bottom: 6px;
+}
+.warn-copy:active { background: #E5E7EB; }
+
+/* ======= صفحة البحث عن الأشخاص ======= */
+.search-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.search-input {
+  flex: 1;
+  height: 46px;
+  border: none;
+  outline: none;
+  border-radius: 999px;
+  background: #F2F3F5;
+  padding: 0 18px;
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  text-align: right;
+  min-width: 0;
+}
+.search-input:focus { outline: 2px solid var(--winner-green); }
+.search-input::placeholder { color: #9AA0A8; font-size: 13.5px; }
+.search-go {
+  flex: 0 0 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: var(--winner-green);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.search-go:active { opacity: 0.85; }
+.search-hint {
+  text-align: center;
+  color: #B91C1C;
+  font-size: 13.5px;
+  font-weight: 700;
+  margin: 12px 0 0;
+}
+.search-title {
+  text-align: right;
+  color: #8A8F98;
+  font-size: 12.5px;
+  font-weight: 700;
+  margin: 14px 2px 6px;
+}
+.search-results {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.search-row-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #F9FAFB;
+  border: 1px solid #EEF0F3;
+  border-radius: 12px;
+  padding: 10px 12px;
+  cursor: pointer;
+}
+.search-row-item:active { background: #F3F4F6; }
+.search-row-item .list-av {
+  flex: 0 0 42px;
+  width: 42px;
+  height: 42px;
+}
+.search-id {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.search-name {
+  font-size: 15px;
+  font-weight: 800;
+  color: #111;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.search-user {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #6b7280;
+  direction: ltr;
+  unicode-bidi: embed;
+  text-align: right;
+}
+.search-user:empty { display: none; }
+
 /* عرض مراسلة العضو داخل نافذة الإجراءات */
 .msg-member {
   display: flex;

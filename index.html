@@ -18,7 +18,7 @@
   <meta property="og:image" content="https://rayanxx509.github.io/509/logo-og.jpg" />
   <meta property="og:site_name" content="المداقش" />
   <meta name="twitter:card" content="summary" />
-  <link rel="stylesheet" href="styles.css?v=50" />
+  <link rel="stylesheet" href="styles.css?v=51" />
   <title>المداقش — نشرة الحكم</title>
 </head>
 <body>
@@ -68,6 +68,22 @@
       <button id="homeNewBtn" class="home-btn home-btn-green" type="button">ابدأ نشرة مداقش جديدة</button>
       <button id="homeContinueBtn" class="home-btn home-btn-gray" type="button">ادخل إلى نشرتك المُخزنة حالياً</button>
       <button id="homeFriendBtn" class="home-btn home-btn-gray hidden" type="button">الرجوع إلى نشرة صاحبك</button>
+    </div>
+  </section>
+
+  <!-- صفحة البحث عن الأشخاص -->
+  <section id="searchScreen" class="screen hidden" aria-hidden="true">
+    <div class="page-card">
+      <div class="search-bar-row">
+        <input id="searchInput" class="search-input" type="text" maxlength="30" dir="auto"
+               placeholder="ابحث عن اسم شخص او يوزره..." autocomplete="off" />
+        <button id="searchGoBtn" class="search-go" type="button" aria-label="بحث">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.2" y2="16.2"/></svg>
+        </button>
+      </div>
+      <p id="searchHint" class="search-hint hidden">بحثك لم يُطابق شيئاً موجوداً</p>
+      <p id="searchTitle" class="search-title">اقتراح لحسابات الاشخاص الموجودين :</p>
+      <div id="searchResults" class="search-results"></div>
     </div>
   </section>
 
@@ -167,11 +183,17 @@
       <span id="shareBtnLabel" class="bar-label">مشاركة النشرة</span>
       <span id="shareViewersCount" class="bar-sub hidden">👁 0</span>
     </button>
+    <button id="searchBtn" class="bar-item" type="button">
+      <span class="bar-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.2" y2="16.2"/></svg></span>
+      <span class="bar-label">بحث</span>
+    </button>
     <button id="meBtn" class="bar-item" type="button">
+      <span id="meWarnBadge" class="bar-warn hidden" aria-hidden="true"><svg viewBox="0 0 24 24" width="15" height="15"><path fill="#DC2626" d="M12 2 23 21H1z"/><rect x="11" y="9" width="2" height="6" rx="1" fill="#fff"/><circle cx="12" cy="18" r="1.2" fill="#fff"/></svg></span>
       <span class="bar-icon"><span id="meBarAvatar" class="bar-avatar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.6"/><path d="M5 20v-1a5.5 5.5 0 0 1 5.5-5.5h3A5.5 5.5 0 0 1 19 19v1"/></svg></span></span>
       <span class="bar-label">أنت</span>
     </button>
     <button id="ownerBtn" class="bar-item hidden" type="button">
+      <span id="ownerBadge" class="bar-badge hidden" aria-hidden="true">0</span>
       <span class="bar-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18h18"/><path d="M4 16 3 7l5 3 4-6 4 6 5-3-1 9z"/></svg></span>
       <span class="bar-label">لوحة المالك</span>
     </button>
@@ -198,6 +220,9 @@
 
       <p class="owner-sec-title">البلاغات :</p>
       <div id="reportsList" class="owner-list"><div class="mod-empty">جارِ التحميل...</div></div>
+
+      <p class="owner-sec-title">التحذيرات :</p>
+      <div id="warnRepliesList" class="owner-list"><div class="mod-empty">جارِ التحميل...</div></div>
 
       <p class="owner-sec-title">النشرات الحيَّة :</p>
       <div id="liveList" class="owner-list"><div class="mod-empty">جارِ التحميل...</div></div>
@@ -235,6 +260,11 @@
           </div>
         </div>
       </div>
+
+      <button id="warnNoticeBtn" class="warn-notice hidden" type="button">
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="#DC2626" d="M12 2 23 21H1z"/><rect x="11" y="9" width="2" height="6" rx="1" fill="#fff"/><circle cx="12" cy="18" r="1.2" fill="#fff"/></svg>
+        <span id="warnNoticeText">لديك تحذير من الإدارة - اضغط هنا للمشاهدة</span>
+      </button>
 
       <p class="profile-bio-label">النبذة :</p>
       <textarea id="profileBioEdit" class="profile-bio-edit hidden" maxlength="1000"
@@ -441,6 +471,7 @@
           <button id="adminSuspendBtn" class="btn-primary" type="button">⏸ إيقاف مؤقت</button>
           <button id="adminClearRepBtn" class="btn-primary" type="button">🧹 مسح البلاغات</button>
           <button id="adminEmailBtn" class="btn-primary" type="button">📧 مُراسلة الشخص على الايميل</button>
+          <button id="adminWarnBtn" class="btn-primary" type="button">⚠️ تحذير الشخص</button>
           <button id="adminDeleteBtn" class="btn-danger" type="button">🗑 حذف الملف نهائياً</button>
           <button id="adminCloseBtn" class="btn-back" type="button">رجوع</button>
         </div>
@@ -466,6 +497,55 @@
         </div>
       </div>
 
+      <div id="adminWarnView" class="hidden">
+        <h2 class="confirm-title">⚠️ تحذير الشخص</h2>
+        <p class="msg-label">اكتب تحذيرك بالحقل التالي :</p>
+        <textarea id="warnAdminText" class="msg-text" maxlength="1000" dir="auto" placeholder="نص التحذير..."></textarea>
+        <div id="warnAdminCount" class="msg-count">0/1000</div>
+        <div class="msg-actions">
+          <button id="warnAdminSendBtn" class="msg-send" type="button">إرسال</button>
+          <button id="warnAdminBackBtn" class="msg-back" type="button">رجوع للخلف</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- نافذة قراءة التحذير (لصاحبه: قراءة + رد للإدارة | للمالك: قراءة + إزالة) -->
+  <div id="warnOverlay" class="overlay hidden" aria-hidden="true">
+    <div class="confirm-box" role="dialog" aria-modal="true">
+      <h2 class="confirm-title">⚠️ تحذير من الإدارة</h2>
+      <p id="warnText" class="warn-text">—</p>
+      <button id="warnCopyBtn" class="warn-copy" type="button">📋 نسخ نص التحذير</button>
+      <div id="warnReplyWrap">
+        <p class="msg-label">أرسل للإدارة وأخبرهم :</p>
+        <textarea id="warnReplyText" class="msg-text" maxlength="1000" dir="auto"
+                  placeholder="اكتب توضيحك او تصحيحك للإدارة هنا..."></textarea>
+        <div id="warnReplyCount" class="msg-count">0/1000</div>
+        <div class="msg-actions">
+          <button id="warnReplySendBtn" class="msg-send" type="button">إرسال</button>
+          <button id="warnCloseBtn" class="msg-back" type="button">رجوع</button>
+        </div>
+      </div>
+      <div id="warnOwnerActions" class="confirm-actions hidden">
+        <button id="warnOwnerRemoveBtn" class="btn-danger" type="button">🚫 إزالة التحذير من ملفه</button>
+        <button id="warnOwnerCloseBtn" class="btn-back" type="button">رجوع</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- نافذة رد المحذَّر (قسم التحذيرات في لوحة المالك) -->
+  <div id="warnReplyOverlay" class="overlay hidden" aria-hidden="true">
+    <div class="confirm-box" role="dialog" aria-modal="true">
+      <h2 class="confirm-title">📨 رد على تحذير</h2>
+      <p id="wrFrom" class="report-line report-reporter" style="text-align:center;">—</p>
+      <p id="wrTime" class="report-line" style="text-align:center;">—</p>
+      <p id="wrText" class="warn-text">—</p>
+      <div class="confirm-actions">
+        <button id="wrDelReplyBtn" class="btn-danger" type="button">🗑 إزالة الإشعار</button>
+        <button id="wrDelWarnBtn" class="btn-danger" type="button">🚫 إزالة التحذير من ملفه</button>
+        <button id="wrCloseBtn" class="btn-back" type="button">رجوع</button>
+      </div>
     </div>
   </div>
 
@@ -520,6 +600,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=50"></script>
+  <script src="app.js?v=51"></script>
 </body>
 </html>

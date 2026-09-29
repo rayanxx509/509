@@ -11,7 +11,7 @@
    - شاشة فوز بنظام الإقرار + زر "الفائز" اليدوي
    ==================================================================== */
 
-const APP_VERSION    = 50;             // يجب أن يطابق version.json و ?v= في index.html
+const APP_VERSION    = 51;             // يجب أن يطابق version.json و ?v= في index.html
 const PLAYERS_COUNT  = 10;
 const STORAGE_KEY    = 'madagish.v1';
 const REFRESH_MS     = 3000;
@@ -961,6 +961,8 @@ function closeSubScreens() {
   if (os) os.classList.add('hidden');
   const hs = document.getElementById('homeScreen');
   if (hs) { hs.classList.add('hidden'); hs.setAttribute('aria-hidden', 'true'); }
+  const ss = document.getElementById('searchScreen');
+  if (ss) { ss.classList.add('hidden'); ss.setAttribute('aria-hidden', 'true'); }
   closeSettingsDrawer(true);   // مغادرة الملف = الدرج لا يبقى معلقاً
 }
 
@@ -1052,6 +1054,185 @@ function bindHomeScreen() {
   });
 }
 
+/* ====================================================================
+   البحث عن الأشخاص — صفحة مستقلة بحقل بحث واقتراحات وتحميل تدريجي
+   (فهرس اليوزرات خفيف يُجلب مرة واحدة، والملفات تُجلب 10 فقط مع كل نزول
+   — أسلوب تعليقات يوتيوب: رفق بالشبكة مهما كبر عدد الحسابات)
+   ==================================================================== */
+let searchUnames = null;      // فهرس [{u: يوزر, uid}]
+let searchShuffled = [];      // ترتيب عشوائي لجولة التصفح الحالية
+let searchPos = 0;            // كم حساباً عُرض حتى الآن
+let searchBrowseMode = true;  // تصفح مقترحات أم نتائج بحث
+let searchDebounce = null;
+
+function openSearchScreen() {
+  if (state.winnerShown) return;
+  closeSubScreens();
+  el.listScreen.classList.add('hidden');
+  const sc = document.getElementById('searchScreen');
+  sc.classList.remove('hidden');
+  sc.setAttribute('aria-hidden', 'false');
+  updateBarActive();
+  ensureSearchIndex();
+}
+
+async function ensureSearchIndex() {
+  const res = document.getElementById('searchResults');
+  if (searchUnames) {
+    if (!res.children.length) resetSearchBrowse(false);
+    return;
+  }
+  res.innerHTML = '<div class="mod-empty">جارِ التحميل...</div>';
+  try {
+    const r = await fetch(`${DB_BASE}/usernames.json?t=` + Date.now(), { cache: 'no-store' });
+    const data = r.ok ? await r.json() : null;
+    searchUnames = [];
+    if (data && typeof data === 'object') {
+      for (const u of Object.keys(data)) {
+        const uid = data[u];
+        if (typeof uid === 'string' && uid && uid !== 'reserved') searchUnames.push({ u, uid });
+      }
+    }
+    resetSearchBrowse(false);
+  } catch (_) {
+    res.innerHTML = '<div class="mod-empty">تعذر التحميل — تحقق من الشبكة</div>';
+  }
+}
+
+/* صف حساب: أفتار + الاسم وتحته اليوزر — الضغط ينقل للملف الشخصي */
+function makeSearchRow(uid, unameGuess) {
+  const row = document.createElement('div');
+  row.className = 'search-row-item';
+  const av = document.createElement('span');
+  av.className = 'list-av';
+  av.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.6"/><path d="M5 20v-1a5.5 5.5 0 0 1 5.5-5.5h3A5.5 5.5 0 0 1 19 19v1"/></svg>';
+  fillAvatar(av, uid);
+  const idBox = document.createElement('span');
+  idBox.className = 'search-id';
+  const nm = document.createElement('span');
+  nm.className = 'search-name';
+  nm.textContent = 'مستخدم';
+  const un = document.createElement('span');
+  un.className = 'search-user';
+  un.textContent = unameGuess ? '@' + unameGuess : '';
+  idBox.appendChild(nm);
+  idBox.appendChild(un);
+  row.appendChild(av);
+  row.appendChild(idBox);
+  const apply = (p) => {
+    if (!p) return;
+    if (p.name) nm.textContent = p.name;
+    if (p.username) un.textContent = '@' + p.username;
+  };
+  const cached = profilesCache[uid];
+  if (cached) apply(cached);
+  else fetchProfile(uid).then(apply).catch(() => {});
+  row.addEventListener('click', () => openProfileScreen(uid));
+  return row;
+}
+
+function resetSearchBrowse(keepHint) {
+  searchBrowseMode = true;
+  searchShuffled = (searchUnames || []).slice();
+  for (let i = searchShuffled.length - 1; i > 0; i--) {   // خلط عشوائي
+    const j = Math.floor(Math.random() * (i + 1));
+    const t = searchShuffled[i]; searchShuffled[i] = searchShuffled[j]; searchShuffled[j] = t;
+  }
+  searchPos = 0;
+  if (!keepHint) document.getElementById('searchHint').classList.add('hidden');
+  const title = document.getElementById('searchTitle');
+  title.textContent = 'اقتراح لحسابات الاشخاص الموجودين :';
+  title.classList.toggle('hidden', searchShuffled.length === 0);
+  const res = document.getElementById('searchResults');
+  res.innerHTML = searchShuffled.length ? '' : '<div class="mod-empty">لا توجد حسابات بعد</div>';
+  loadMoreSearchRows();
+}
+
+function loadMoreSearchRows() {
+  if (!searchBrowseMode || !searchShuffled.length) return;
+  const res = document.getElementById('searchResults');
+  const slice = searchShuffled.slice(searchPos, searchPos + 10);   // 10 حسابات لكل دفعة
+  searchPos += slice.length;
+  for (const e of slice) res.appendChild(makeSearchRow(e.uid, e.u));
+}
+
+function onSearchScroll() {
+  const sc = document.getElementById('searchScreen');
+  if (!sc || sc.classList.contains('hidden')) return;
+  if (!searchBrowseMode || searchPos >= searchShuffled.length) return;
+  if (window.innerHeight + window.scrollY >= document.body.offsetHeight - 300) {
+    loadMoreSearchRows();   // اقترب من الأسفل — حمّل 10 إضافية
+  }
+}
+
+async function runPeopleSearch(qRaw) {
+  const q = (qRaw || '').trim();
+  const hint = document.getElementById('searchHint');
+  const title = document.getElementById('searchTitle');
+  const res = document.getElementById('searchResults');
+  if (!q) { resetSearchBrowse(false); return; }
+  if (!searchUnames) await ensureSearchIndex();
+  searchBrowseMode = false;
+
+  const seen = {};
+  const found = [];
+  const ql = q.toLowerCase();
+  // 1) مطابقة اليوزرات (يحتوي)
+  for (const e of (searchUnames || [])) {
+    if (e.u.indexOf(ql) !== -1 && !seen[e.uid]) {
+      seen[e.uid] = 1;
+      found.push({ uid: e.uid, u: e.u });
+      if (found.length >= 8) break;
+    }
+  }
+  // 2) مطابقة الأسماء (بادئة — عبر فهرس name في القاعدة)
+  try {
+    const url = `${DB_BASE}/profiles.json?orderBy=${encodeURIComponent('"name"')}` +
+      `&startAt=${encodeURIComponent(JSON.stringify(q))}` +
+      `&endAt=${encodeURIComponent(JSON.stringify(q + ''))}` +
+      `&limitToFirst=8&t=` + Date.now();
+    const r2 = await fetch(url, { cache: 'no-store' });
+    if (r2.ok) {
+      const d2 = await r2.json();
+      if (d2 && typeof d2 === 'object') {
+        for (const uid of Object.keys(d2)) {
+          if (!seen[uid] && d2[uid] && typeof d2[uid] === 'object') {
+            seen[uid] = 1;
+            profilesCache[uid] = d2[uid];
+            found.push({ uid, u: d2[uid].username || null });
+          }
+        }
+      }
+    }
+  } catch (_) {}
+
+  res.innerHTML = '';
+  if (found.length) {
+    hint.classList.add('hidden');
+    title.classList.remove('hidden');
+    title.textContent = 'هل تقصد هذا ؟';
+    for (const f of found) res.appendChild(makeSearchRow(f.uid, f.u));
+  } else {
+    // لا تطابق: النص + اقتراحات تحته
+    hint.classList.remove('hidden');
+    resetSearchBrowse(true);
+  }
+}
+
+function bindSearchEvents() {
+  document.getElementById('searchBtn').addEventListener('click', openSearchScreen);
+  const sInput = document.getElementById('searchInput');
+  sInput.addEventListener('input', () => {
+    clearTimeout(searchDebounce);
+    searchDebounce = setTimeout(() => runPeopleSearch(sInput.value), 350);
+  });
+  sInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); runPeopleSearch(sInput.value); sInput.blur(); }
+  });
+  document.getElementById('searchGoBtn').addEventListener('click', () => runPeopleSearch(sInput.value));
+  window.addEventListener('scroll', onSearchScroll);
+}
+
 /* المؤشر المنزلق: ينساب خلف زر القائمة النشطة بحركة 0.35 ثانية */
 function updateBarActive() {
   const indicator = document.getElementById('barIndicator');
@@ -1059,11 +1240,13 @@ function updateBarActive() {
   const ps = document.getElementById('profileScreen');
   const os = document.getElementById('ownerScreen');
   const hs = document.getElementById('homeScreen');
+  const ss = document.getElementById('searchScreen');
   const states = [
     ['mainHomeBtn', hs ? !hs.classList.contains('hidden') : false],
     ['homeBtn',    !el.listScreen.classList.contains('hidden')],
     ['devInfoBtn', !el.devScreen.classList.contains('hidden')],
     ['roundsBtn',  !el.roundsScreen.classList.contains('hidden')],
+    ['searchBtn',  ss ? !ss.classList.contains('hidden') : false],
     ['ownerBtn',   os ? !os.classList.contains('hidden') : false],
     ['meBtn',      (ps ? !ps.classList.contains('hidden') : false) && profileViewUid === chatUid()]
   ];
@@ -1363,6 +1546,7 @@ function bindEvents() {
 
   // الشريط السفلي والصفحات الفرعية
   bindHomeScreen();
+  bindSearchEvents();
   document.getElementById('homeBtn').addEventListener('click', backToList);
   el.devInfoBtn.addEventListener('click', openDevScreen);
   el.roundsBtn.addEventListener('click', openRoundsScreen);
@@ -2633,6 +2817,10 @@ function renderProfileScreen(uid, p) {
   const menuBtn = document.getElementById('profileMenuBtn');
   if (menuBtn) menuBtn.classList.toggle('hidden', !profileIsMine || lockedOut);
 
+  // زر التحذير: مخفي افتراضياً — loadProfileWarning يُظهره لصاحبه/للمالك إن وُجد تحذير
+  const wbtn = document.getElementById('warnNoticeBtn');
+  if (wbtn) wbtn.classList.add('hidden');
+
   // النبذة تُخفى في الملف الموقوف (لغير المالك)
   document.querySelector('.profile-bio-label').classList.toggle('hidden', hiddenContent);
   if (hiddenContent) {
@@ -2687,8 +2875,13 @@ async function openProfileScreen(uid) {
   const cached = profilesCache[uid];
   renderProfileScreen(uid, cached || null);
   updateBarActive();
+  loadProfileWarning(uid);   // زر التحذير (لصاحب الملف وللمالك فقط)
   const fresh = await fetchProfile(uid);
-  if (profileViewUid === uid) renderProfileScreen(uid, fresh);
+  if (profileViewUid === uid) {
+    renderProfileScreen(uid, fresh);
+    // إعادة الرسم تخفي زر التحذير افتراضياً — أعد إظهاره إن كان الفحص وجد تحذيراً
+    if (profileWarnUid === uid && profileWarn) applyWarnNotice(profileWarn, uid);
+  }
 }
 
 function closeSubScreensAll() { closeSubScreens(); }
@@ -3210,8 +3403,13 @@ function openOwnerScreen() {
   document.getElementById('ownerScreen').classList.remove('hidden');
   updateOwnerVisBtn();
   renderReportsList();
+  renderWarnRepliesList();
   renderLiveList();
   updateBarActive();
+  // فتح اللوحة = اطلعت على الجديد — الشارة تختفي حتى يصل جديد آخر
+  try { localStorage.setItem('madagish.ownerSeen', String(ownerTotalCache)); } catch (_) {}
+  const b = document.getElementById('ownerBadge');
+  if (b) b.classList.add('hidden');
 }
 
 function vipShowError(msg) {
@@ -3355,8 +3553,22 @@ async function openReportInfo(uid, reportsMap) {
     const rEmail = await fetchContactEmail(it.rep);
     const tm = fmtSaudiTime(it.ts || null);
 
+    // سطر المُبلِّغ: اسمه قابل للضغط — ينقل المالك لملفه الشخصي مباشرة
+    const l1 = document.createElement('p');
+    l1.className = 'report-line';
+    l1.appendChild(document.createTextNode('الذي قام بالبلاغ هو : '));
+    const repLink = document.createElement('span');
+    repLink.className = 'report-reporter';
+    repLink.textContent = (rp && rp.name) ? `"${rp.name}"` : 'مستخدم';
+    repLink.addEventListener('click', () => {
+      closeOverlaySheet(document.getElementById('reportInfoOverlay'));
+      openProfileScreen(it.rep);
+    });
+    l1.appendChild(repLink);
+    l1.appendChild(document.createTextNode(' | اليوزر : ' + ((rp && rp.username) ? '@' + rp.username : 'لايوجد')));
+    block.appendChild(l1);
+
     const lines = [
-      ['الذي قام بالبلاغ هو : ', (rp && rp.name) ? `"${rp.name}"` : 'لايوجد', ' | اليوزر : ', (rp && rp.username) ? '@' + rp.username : 'لايوجد'],
       ['ايميله : ', rEmail || 'لايوجد'],
       ['وقت البلاغ : ', tm.t, ' | تاريخ : ', tm.d, ' | يوم : ', tm.w],
       ['وذكر السبب التالي :'],
@@ -3399,6 +3611,168 @@ async function openReportInfo(uid, reportsMap) {
     body.appendChild(block);
   }
   if (!items.length) body.innerHTML = '<div class="mod-empty">لا توجد تفاصيل</div>';
+}
+
+/* ====================================================================
+   نظام التحذيرات: المالك يحذّر عضواً ← يظهر للعضو (مثلث تعجب على "أنت"
+   + زر أحمر في ملفه) ← يقرأه ويرد على الإدارة ← رده في قسم التحذيرات
+   بلوحة المالك. التحذير لا يظهر لبقية الأعضاء إطلاقاً.
+   ==================================================================== */
+const OWNER_POLL_MS = 60000;   // فحص شارات المالك وتحذير العضو كل دقيقة
+
+/* --- شارة المالك الحمراء (بلاغات + ردود تحذيرات جديدة) --- */
+let ownerTotalCache = 0;
+
+function updateOwnerBadge(total) {
+  const b = document.getElementById('ownerBadge');
+  if (!b) return;
+  let seen = 0;
+  try { seen = parseInt(localStorage.getItem('madagish.ownerSeen') || '0', 10) || 0; } catch (_) {}
+  if (total < seen) {
+    seen = total;   // حُذفت عناصر — لا نراكم عدّاً وهمياً
+    try { localStorage.setItem('madagish.ownerSeen', String(total)); } catch (_) {}
+  }
+  const fresh = total - seen;
+  b.textContent = String(fresh);
+  b.classList.toggle('hidden', fresh <= 0);
+}
+
+async function pollOwnerInbox() {
+  if (!isOwner()) return;
+  try {
+    let total = 0;
+    const r1 = await fetch(`${DB_BASE}/reports.json?t=` + Date.now(), { cache: 'no-store' });
+    if (r1.ok) {
+      const d = await r1.json();
+      if (d && typeof d === 'object') for (const k of Object.keys(d)) total += Object.keys(d[k] || {}).length;
+    }
+    const r2 = await fetch(`${DB_BASE}/warnReplies.json?t=` + Date.now(), { cache: 'no-store' });
+    if (r2.ok) {
+      const d2 = await r2.json();
+      if (d2 && typeof d2 === 'object') total += Object.keys(d2).length;
+    }
+    ownerTotalCache = total;
+    updateOwnerBadge(total);
+  } catch (_) { /* شبكة — الدورة القادمة */ }
+}
+
+function startOwnerBadge() {
+  if (!isOwner()) return;
+  pollOwnerInbox();
+  setInterval(pollOwnerInbox, OWNER_POLL_MS);
+}
+
+/* --- مراقبة تحذيري أنا (كل الأعضاء) --- */
+let myWarning = null;
+
+async function pollMyWarning() {
+  try {
+    const res = await fetch(`${DB_BASE}/warnings/${chatUid()}.json?t=` + Date.now(), { cache: 'no-store' });
+    if (!res.ok) return;
+    const w = await res.json();
+    myWarning = (w && typeof w === 'object' && typeof w.t === 'string') ? w : null;
+  } catch (_) { return; }
+  const badge = document.getElementById('meWarnBadge');
+  if (badge) badge.classList.toggle('hidden', !myWarning);
+  // ملفي مفتوح الآن؟ حدّث زر التحذير فوراً
+  if (profileViewUid === chatUid()) applyWarnNotice(myWarning, chatUid());
+}
+
+function startWarnWatch() {
+  pollMyWarning();
+  setInterval(pollMyWarning, OWNER_POLL_MS);
+}
+
+/* --- زر التحذير داخل صفحة الملف (لصاحبه وللمالك فقط) --- */
+let profileWarn = null;
+let profileWarnUid = null;
+
+function applyWarnNotice(w, uid) {
+  const btn = document.getElementById('warnNoticeBtn');
+  const txt = document.getElementById('warnNoticeText');
+  if (!btn || !txt) return;
+  profileWarn = w;
+  profileWarnUid = uid;
+  txt.textContent = (uid === chatUid())
+    ? 'لديك تحذير من الإدارة - اضغط هنا للمشاهدة'
+    : 'لدى هذا العضو تحذير نشط - اضغط للمشاهدة';
+  btn.classList.toggle('hidden', !w);
+}
+
+async function loadProfileWarning(uid) {
+  const btn = document.getElementById('warnNoticeBtn');
+  if (!btn) return;
+  const mine = uid === chatUid();
+  if (!mine && !isOwner()) { btn.classList.add('hidden'); return; }   // الأعضاء لا يرون تحذيرات غيرهم
+  try {
+    const res = await fetch(`${DB_BASE}/warnings/${uid}.json?t=` + Date.now(), { cache: 'no-store' });
+    if (!res.ok) return;
+    const w = await res.json();
+    const valid = (w && typeof w === 'object' && typeof w.t === 'string') ? w : null;
+    if (mine) myWarning = valid;
+    if (profileViewUid === uid) applyWarnNotice(valid, uid);
+  } catch (_) {}
+}
+
+/* --- نافذة قراءة التحذير --- */
+let warnViewUid = null;
+
+function openWarnView(uid, w) {
+  if (!w || typeof w.t !== 'string') return;
+  warnViewUid = uid;
+  document.getElementById('warnText').textContent = w.t;
+  const mine = uid === chatUid();
+  document.getElementById('warnReplyWrap').classList.toggle('hidden', !mine);
+  document.getElementById('warnOwnerActions').classList.toggle('hidden', mine);
+  const ta = document.getElementById('warnReplyText');
+  if (ta) { ta.value = ''; document.getElementById('warnReplyCount').textContent = '0/1000'; }
+  openOverlaySheet(document.getElementById('warnOverlay'));
+}
+
+/* --- قسم التحذيرات في لوحة المالك (ردود المحذَّرين) --- */
+let wrUid = null;
+
+async function renderWarnRepliesList() {
+  const list = document.getElementById('warnRepliesList');
+  if (!list) return;
+  list.innerHTML = '<div class="mod-empty">جارِ التحميل...</div>';
+  try {
+    const res = await fetch(`${DB_BASE}/warnReplies.json?t=` + Date.now(), { cache: 'no-store' });
+    const data = res.ok ? await res.json() : null;
+    list.innerHTML = '';
+    if (!data || typeof data !== 'object' || Object.keys(data).length === 0) {
+      list.innerHTML = '<div class="mod-empty">لا توجد ردود من المحذَّرين 🌿</div>';
+      return;
+    }
+    const rows = Object.keys(data)
+      .map(uid => ({ uid, t: (data[uid] && data[uid].t) || '', ts: (data[uid] && data[uid].ts) || 0 }))
+      .sort((a, b) => b.ts - a.ts);
+    for (const r of rows) {
+      const p = profilesCache[r.uid] || await fetchProfile(r.uid);
+      const row = document.createElement('div');
+      row.className = 'owner-row';
+      const main = document.createElement('span');
+      main.className = 'owner-row-main';
+      main.textContent = '📨 ' + ((p && p.name) ? p.name : 'مستخدم') + ((p && p.username) ? ' ( @' + p.username + ' )' : '');
+      const sub = document.createElement('span');
+      sub.className = 'owner-row-sub';
+      sub.textContent = fmtSaudiTime(r.ts || null).t;
+      row.appendChild(main);
+      row.appendChild(sub);
+      row.addEventListener('click', () => openWarnReplyDetail(r));
+      list.appendChild(row);
+    }
+  } catch (_) { list.innerHTML = '<div class="mod-empty">تعذر التحميل</div>'; }
+}
+
+function openWarnReplyDetail(r) {
+  wrUid = r.uid;
+  const p = profilesCache[r.uid] || {};
+  document.getElementById('wrFrom').textContent = 'من : ' + (p.name || 'مستخدم') + (p.username ? ' | @' + p.username : '');
+  const tm = fmtSaudiTime(r.ts || null);
+  document.getElementById('wrTime').textContent = 'وقت الرد : ' + tm.t + ' | ' + tm.d + ' | ' + tm.w;
+  document.getElementById('wrText').textContent = r.t || '—';
+  openOverlaySheet(document.getElementById('warnReplyOverlay'));
 }
 
 async function renderLiveList() {
@@ -3678,10 +4052,11 @@ function bindProfileEvents() {
   document.getElementById('reportBtn').addEventListener('click', doReportUser);
   const adminOverlay = document.getElementById('adminOverlay');
 
-  // داخل نافذة الإجراءات عرضان: الإجراءات ←→ مراسلة العضو على الإيميل
+  // داخل نافذة الإجراءات ثلاثة عروض: الإجراءات ←→ مراسلة العضو ←→ تحذير الشخص
   function showAdminActionsView() {
     document.getElementById('adminActionsView').classList.remove('hidden');
     document.getElementById('adminMsgView').classList.add('hidden');
+    document.getElementById('adminWarnView').classList.add('hidden');
   }
   let adminMsgEmail = null;
   async function openAdminMsgView() {
@@ -3731,6 +4106,127 @@ function bindProfileEvents() {
     location.href = 'mailto:' + adminMsgEmail +
       '?subject=' + encodeURIComponent('رسالة من إدارة المداقش 👑') +
       '&body=' + encodeURIComponent(txt);
+  });
+
+  // تحذير الشخص: عرض داخل نفس النافذة — الإرسال يكتب التحذير في ملفه
+  document.getElementById('adminWarnBtn').addEventListener('click', () => {
+    document.getElementById('adminActionsView').classList.add('hidden');
+    document.getElementById('adminWarnView').classList.remove('hidden');
+    const ta = document.getElementById('warnAdminText');
+    ta.value = '';
+    document.getElementById('warnAdminCount').textContent = '0/1000';
+  });
+  document.getElementById('warnAdminBackBtn').addEventListener('click', showAdminActionsView);
+  document.getElementById('warnAdminText').addEventListener('input', () => {
+    document.getElementById('warnAdminCount').textContent =
+      document.getElementById('warnAdminText').value.length + '/1000';
+  });
+  document.getElementById('warnAdminSendBtn').addEventListener('click', async () => {
+    const txt = (document.getElementById('warnAdminText').value || '').trim().slice(0, 1000);
+    if (!txt) { showToast('اكتب التحذير أولاً'); return; }
+    try {
+      await fetch(`${DB_BASE}/warnings/${profileViewUid}.json`, {
+        method: 'PUT',
+        body: JSON.stringify({ t: txt, ts: { '.sv': 'timestamp' } })
+      });
+      showToast('تم إرسال التحذير للعضو ⚠️');
+      closeOverlaySheet(adminOverlay);
+      loadProfileWarning(profileViewUid);   // يظهر للمالك فوراً في ملف العضو
+    } catch (_) { showToast('تعذر الإرسال — تحقق من الشبكة'); }
+  });
+
+  // زر التحذير في الملف الشخصي (لصاحبه وللمالك)
+  document.getElementById('warnNoticeBtn').addEventListener('click', () => {
+    if (profileWarn && profileWarnUid) openWarnView(profileWarnUid, profileWarn);
+  });
+
+  // نافذة قراءة التحذير: نسخ + رد العضو + إزالة المالك
+  const warnOverlay = document.getElementById('warnOverlay');
+  document.getElementById('warnCopyBtn').addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(document.getElementById('warnText').textContent);
+      showToast('نُسخ نص التحذير ✓');
+    } catch (_) { showToast('حدد النص وانسخه يدوياً'); }
+  });
+  document.getElementById('warnReplyText').addEventListener('input', () => {
+    document.getElementById('warnReplyCount').textContent =
+      document.getElementById('warnReplyText').value.length + '/1000';
+  });
+  document.getElementById('warnReplySendBtn').addEventListener('click', async () => {
+    const txt = (document.getElementById('warnReplyText').value || '').trim().slice(0, 1000);
+    if (!txt) { showToast('اكتب رسالتك أولاً'); return; }
+    try {
+      await fetch(`${DB_BASE}/warnReplies/${chatUid()}.json`, {
+        method: 'PUT',
+        body: JSON.stringify({ t: txt, ts: { '.sv': 'timestamp' } })
+      });
+      showToast('وصلت رسالتك للإدارة ✓');
+      closeOverlaySheet(warnOverlay);
+    } catch (_) { showToast('تعذر الإرسال — تحقق من الشبكة'); }
+  });
+  document.getElementById('warnCloseBtn').addEventListener('click', () => closeOverlaySheet(warnOverlay));
+  document.getElementById('warnOwnerCloseBtn').addEventListener('click', () => closeOverlaySheet(warnOverlay));
+  warnOverlay.addEventListener('click', (e) => {
+    if (e.target === warnOverlay) closeOverlaySheet(warnOverlay);
+  });
+  document.getElementById('warnOwnerRemoveBtn').addEventListener('click', () => {
+    showConfirm({
+      title: 'إزالة التحذير',
+      body:  'هل تريد إزالة التحذير من ملف هذا العضو ؟',
+      okText: 'نعم',
+      danger: true, solid: true, solidCancel: true,
+      onOk: async () => {
+        try {
+          await fetch(`${DB_BASE}/warnings/${warnViewUid}.json`, { method: 'DELETE' });
+          closeOverlaySheet(warnOverlay);
+          applyWarnNotice(null, warnViewUid);
+          showToast('أُزيل التحذير ✓');
+        } catch (_) { showToast('تعذر التنفيذ — تحقق من الشبكة'); }
+      }
+    });
+  });
+
+  // نافذة رد المحذَّر (قسم التحذيرات في لوحة المالك)
+  const wrOverlay = document.getElementById('warnReplyOverlay');
+  document.getElementById('wrCloseBtn').addEventListener('click', () => closeOverlaySheet(wrOverlay));
+  wrOverlay.addEventListener('click', (e) => {
+    if (e.target === wrOverlay) closeOverlaySheet(wrOverlay);
+  });
+  document.getElementById('wrFrom').addEventListener('click', () => {
+    if (!wrUid) return;
+    closeOverlaySheet(wrOverlay);
+    openProfileScreen(wrUid);
+  });
+  document.getElementById('wrDelReplyBtn').addEventListener('click', () => {
+    showConfirm({
+      title: 'إزالة الإشعار',
+      body:  'هل تريد إزالة إشعار هذا الرد ؟',
+      okText: 'نعم',
+      danger: true, solid: true, solidCancel: true,
+      onOk: async () => {
+        try {
+          await fetch(`${DB_BASE}/warnReplies/${wrUid}.json`, { method: 'DELETE' });
+          closeOverlaySheet(wrOverlay);
+          renderWarnRepliesList();
+          pollOwnerInbox();
+          showToast('أُزيل الإشعار 🗑');
+        } catch (_) { showToast('تعذر التنفيذ'); }
+      }
+    });
+  });
+  document.getElementById('wrDelWarnBtn').addEventListener('click', () => {
+    showConfirm({
+      title: 'إزالة التحذير',
+      body:  'هل تريد إزالة التحذير من ملف هذا العضو ؟',
+      okText: 'نعم',
+      danger: true, solid: true, solidCancel: true,
+      onOk: async () => {
+        try {
+          await fetch(`${DB_BASE}/warnings/${wrUid}.json`, { method: 'DELETE' });
+          showToast('أُزيل التحذير من ملفه ✓');
+        } catch (_) { showToast('تعذر التنفيذ'); }
+      }
+    });
   });
 
   // نافذة معلومات البلاغ (من قائمة البلاغات في لوحة المالك)
@@ -3966,6 +4462,8 @@ function init() {
   updateShareBtn();
   startUpdateChecker();
   startBgSync();       // مزامنة صور الخلفيات الذكية (الحكم والمشاهد معاً)
+  startOwnerBadge();   // شارة المالك: بلاغات وردود تحذيرات جديدة (للمالك فقط)
+  startWarnWatch();    // مراقبة تحذيري أنا (مثلث التعجب على زر "أنت")
   startPresence();
   recordMonthlyVisit();
   loadMyProfile();
