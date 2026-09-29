@@ -18,7 +18,7 @@
   <meta property="og:image" content="https://rayanxx509.github.io/509/logo-og.jpg" />
   <meta property="og:site_name" content="المداقش" />
   <meta name="twitter:card" content="summary" />
-  <link rel="stylesheet" href="styles.css?v=48" />
+  <link rel="stylesheet" href="styles.css?v=50" />
   <title>المداقش — نشرة الحكم</title>
 </head>
 <body>
@@ -430,16 +430,53 @@
     </div>
   </section>
 
-  <!-- نافذة إجراءات المالك (على ملفات الآخرين) -->
+  <!-- نافذة إجراءات المالك (على ملفات الآخرين) — عرضان: الإجراءات / مراسلة العضو -->
   <div id="adminOverlay" class="overlay hidden" aria-hidden="true">
     <div class="confirm-box" role="dialog" aria-modal="true">
-      <h2 class="confirm-title">👑 أدوات المالك</h2>
-      <p id="adminReports" class="admin-reports">عدد البلاغات : 0</p>
+
+      <div id="adminActionsView">
+        <h2 class="confirm-title">👑 أدوات المالك</h2>
+        <p id="adminReports" class="admin-reports">عدد البلاغات : 0</p>
+        <div class="confirm-actions">
+          <button id="adminSuspendBtn" class="btn-primary" type="button">⏸ إيقاف مؤقت</button>
+          <button id="adminClearRepBtn" class="btn-primary" type="button">🧹 مسح البلاغات</button>
+          <button id="adminEmailBtn" class="btn-primary" type="button">📧 مُراسلة الشخص على الايميل</button>
+          <button id="adminDeleteBtn" class="btn-danger" type="button">🗑 حذف الملف نهائياً</button>
+          <button id="adminCloseBtn" class="btn-back" type="button">رجوع</button>
+        </div>
+      </div>
+
+      <div id="adminMsgView" class="hidden">
+        <h2 class="confirm-title">📧 مُراسلة العضو</h2>
+        <div class="msg-member">
+          <span id="msgAvatar" class="sheet-avatar"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.6"/><path d="M5 20v-1a5.5 5.5 0 0 1 5.5-5.5h3A5.5 5.5 0 0 1 19 19v1"/></svg></span>
+          <div class="msg-member-id">
+            <span id="msgName" class="msg-member-name">—</span>
+            <span id="msgUser" class="msg-member-user">—</span>
+          </div>
+        </div>
+        <p class="msg-label">إيميل صاحب هذا الملف الشخصي :</p>
+        <p id="msgEmail" class="msg-email">—</p>
+        <p class="msg-label">اكتب له رساله :</p>
+        <textarea id="msgText" class="msg-text" maxlength="1000" dir="auto" placeholder="رسالتك..."></textarea>
+        <div id="msgCount" class="msg-count">0/1000</div>
+        <div class="msg-actions">
+          <button id="msgSendBtn" class="msg-send" type="button">إرسال</button>
+          <button id="msgBackBtn" class="msg-back" type="button">رجوع للخلف</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- نافذة معلومات البلاغ (لوحة المالك → البلاغات) -->
+  <div id="reportInfoOverlay" class="overlay hidden" aria-hidden="true">
+    <div class="confirm-box" role="dialog" aria-modal="true">
+      <h2 class="confirm-title">🚩 معلومات عن البلاغ</h2>
+      <div id="reportInfoBody"></div>
       <div class="confirm-actions">
-        <button id="adminSuspendBtn" class="btn-primary" type="button">⏸ إيقاف مؤقت</button>
-        <button id="adminClearRepBtn" class="btn-primary" type="button">🧹 مسح البلاغات</button>
-        <button id="adminDeleteBtn" class="btn-danger" type="button">🗑 حذف الملف نهائياً</button>
-        <button id="adminCloseBtn" class="btn-secondary" type="button">إغلاق</button>
+        <button id="reportInfoProfileBtn" class="btn-primary" type="button">فتح ملف المُبلَّغ عنه</button>
+        <button id="reportInfoCloseBtn" class="btn-back" type="button">رجوع</button>
       </div>
     </div>
   </div>
@@ -483,6 +520,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=48"></script>
+  <script src="app.js?v=50"></script>
 </body>
 </html>

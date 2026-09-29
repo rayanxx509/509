@@ -11,7 +11,7 @@
    - شاشة فوز بنظام الإقرار + زر "الفائز" اليدوي
    ==================================================================== */
 
-const APP_VERSION    = 48;             // يجب أن يطابق version.json و ?v= في index.html
+const APP_VERSION    = 50;             // يجب أن يطابق version.json و ?v= في index.html
 const PLAYERS_COUNT  = 10;
 const STORAGE_KEY    = 'madagish.v1';
 const REFRESH_MS     = 3000;
@@ -1203,7 +1203,9 @@ function showConfirm(opts) {
   el.confirmTitle.textContent = opts.title || 'تأكيد';
   el.confirmText.textContent  = opts.body  || '';
   el.confirmYes.textContent   = opts.okText || 'نعم';
-  el.confirmYes.className = opts.danger ? 'btn-danger' : 'btn-primary';
+  // solid: "نعم" أحمر صلب بنص أبيض | solidCancel: "إلغاء" رمادي غامق بنص أبيض
+  el.confirmYes.className = (opts.danger ? 'btn-danger' : 'btn-primary') + (opts.solid ? ' solid' : '');
+  el.confirmCancel.className = opts.solidCancel ? 'btn-back' : 'btn-secondary';
   pendingConfirmAction = typeof opts.onOk === 'function' ? opts.onOk : null;
   const existingInput = document.getElementById('confirmInlineInput');
   if (existingInput) existingInput.remove();
@@ -1268,7 +1270,7 @@ function showPromptModal(opts) {
 function closeConfirm() {
   pendingConfirmAction = null;
   confirmMandatory = false;
-  el.confirmCancel.classList.remove('hidden');
+  el.confirmCancel.className = 'btn-secondary';   // استعادة الشكل الافتراضي (يزيل hidden أيضاً)
   closeOverlaySheet(el.confirmOverlay);
   const inp = document.getElementById('confirmInlineInput');
   if (inp) inp.remove();
@@ -3090,6 +3092,12 @@ function reportUserFlow(target) {
         const body = { ts: { '.sv': 'timestamp' } };
         const r = (reason || '').trim().slice(0, 200);
         if (r) body.r = r;
+        // موقع المخالفة: بث حي إن كان البلاغ من داخله، وإلا صفحة ملف المُبلَّغ عنه
+        try {
+          body.src = chatShareId
+            ? (appDir() + 'live.html?view=' + chatShareId)
+            : profileLink(target, profilesCache[target] || null);
+        } catch (_) {}
         await fetch(`${DB_BASE}/reports/${target}/${chatUid()}.json`, {
           method: 'PUT',
           body: JSON.stringify(body)
@@ -3176,6 +3184,25 @@ async function writeEmailHash(email, uid) {
   } catch (_) {}
 }
 
+/* إيميل التواصل (فرع contacts) — يغذي معلومات البلاغ وزر مراسلة العضو للمالك */
+async function writeContactEmail(email, uid) {
+  try {
+    await fetch(`${DB_BASE}/contacts/${uid}.json`, {
+      method: 'PUT',
+      body: JSON.stringify(String(email).trim().toLowerCase())
+    });
+  } catch (_) {}
+}
+
+async function fetchContactEmail(uid) {
+  try {
+    const res = await fetch(`${DB_BASE}/contacts/${uid}.json?t=` + Date.now(), { cache: 'no-store' });
+    if (!res.ok) return null;
+    const e = await res.json();
+    return (typeof e === 'string' && e.includes('@')) ? e : null;
+  } catch (_) { return null; }
+}
+
 function openOwnerScreen() {
   if (!isOwner() || state.winnerShown) return;
   closeSubScreens();
@@ -3249,10 +3276,129 @@ async function renderReportsList() {
       sub.textContent = '🚩 ' + e.n + ' بلاغ';
       row.appendChild(main);
       row.appendChild(sub);
-      row.addEventListener('click', () => openProfileScreen(e.uid));
+
+      // سلة الزبالة: حذف البلاغ من القائمة مباشرة (بتأكيد)
+      const del = document.createElement('button');
+      del.type = 'button';
+      del.className = 'report-trash';
+      del.setAttribute('aria-label', 'حذف البلاغ');
+      del.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>';
+      del.addEventListener('click', (ev) => {
+        ev.stopPropagation();   // لا تفتح نافذة المعلومات
+        showConfirm({
+          title: 'حذف البلاغ',
+          body:  'هل تريد حذف البلاغ ؟',
+          okText: 'نعم',
+          danger: true, solid: true, solidCancel: true,
+          onOk: async () => {
+            try {
+              await fetch(`${DB_BASE}/reports/${e.uid}.json`, { method: 'DELETE' });
+              showToast('تم حذف البلاغ 🗑');
+              renderReportsList();
+            } catch (_) { showToast('تعذر الحذف — تحقق من الشبكة'); }
+          }
+        });
+      });
+      row.appendChild(del);
+
+      // الضغط على البلاغ = نافذة "معلومات عن البلاغ" المنزلقة
+      row.addEventListener('click', () => openReportInfo(e.uid, data[e.uid] || {}));
       list.appendChild(row);
     }
   } catch (_) { list.innerHTML = '<div class="mod-empty">تعذر التحميل</div>'; }
+}
+
+/* ============ نافذة معلومات البلاغ (للمالك) ============ */
+/* وقت حقيقي بتوقيت السعودية (Asia/Riyadh) — ساعة ودقائق ص/م + تاريخ + يوم */
+function fmtSaudiTime(ts) {
+  if (typeof ts !== 'number') return { t: 'لايوجد', d: 'لايوجد', w: 'لايوجد' };
+  try {
+    const date = new Date(ts);
+    const L = 'ar-SA-u-ca-gregory-nu-latn';
+    const t = new Intl.DateTimeFormat(L, { timeZone: 'Asia/Riyadh', hour: 'numeric', minute: '2-digit', hour12: true }).format(date);
+    const d = new Intl.DateTimeFormat(L, { timeZone: 'Asia/Riyadh', day: '2-digit', month: '2-digit', year: 'numeric' }).format(date);
+    const w = new Intl.DateTimeFormat(L, { timeZone: 'Asia/Riyadh', weekday: 'long' }).format(date);
+    return { t, d, w };
+  } catch (_) { return { t: '—', d: '—', w: '—' }; }
+}
+
+let reportInfoUid = null;
+
+async function openReportInfo(uid, reportsMap) {
+  reportInfoUid = uid;
+  const body = document.getElementById('reportInfoBody');
+  body.innerHTML = '<div class="mod-empty">جارِ التحميل...</div>';
+  openOverlaySheet(document.getElementById('reportInfoOverlay'));
+
+  // الأحدث أولاً
+  const items = Object.keys(reportsMap)
+    .map(rep => ({ rep, ts: (reportsMap[rep] && typeof reportsMap[rep].ts === 'number') ? reportsMap[rep].ts : 0,
+                   r: reportsMap[rep] && reportsMap[rep].r, src: reportsMap[rep] && reportsMap[rep].src }))
+    .sort((a, b) => b.ts - a.ts);
+
+  body.innerHTML = '';
+  for (const it of items) {
+    const block = document.createElement('div');
+    block.className = 'report-block';
+
+    // زر مشاهدة المخالفة (برتقالي) — يفتح المكان الذي صدر منه البلاغ بالتحديد
+    if (typeof it.src === 'string' && it.src.indexOf('http') === 0) {
+      const vb = document.createElement('button');
+      vb.type = 'button';
+      vb.className = 'violation-btn';
+      vb.textContent = 'إضغط هنا لمشاهدة المخالفة';
+      vb.addEventListener('click', () => { location.href = it.src; });
+      block.appendChild(vb);
+    }
+
+    const rp = profilesCache[it.rep] || await fetchProfile(it.rep);
+    const rEmail = await fetchContactEmail(it.rep);
+    const tm = fmtSaudiTime(it.ts || null);
+
+    const lines = [
+      ['الذي قام بالبلاغ هو : ', (rp && rp.name) ? `"${rp.name}"` : 'لايوجد', ' | اليوزر : ', (rp && rp.username) ? '@' + rp.username : 'لايوجد'],
+      ['ايميله : ', rEmail || 'لايوجد'],
+      ['وقت البلاغ : ', tm.t, ' | تاريخ : ', tm.d, ' | يوم : ', tm.w],
+      ['وذكر السبب التالي :'],
+      [it.r ? `"${it.r}"` : 'لايوجد']
+    ];
+    for (const parts of lines) {
+      const pEl = document.createElement('p');
+      pEl.className = 'report-line';
+      pEl.textContent = parts.join('');
+      block.appendChild(pEl);
+    }
+
+    // زر حذف هذا البلاغ بالتحديد (بتأكيد: نعم أحمر صلب / إلغاء رمادي غامق)
+    const delBtn = document.createElement('button');
+    delBtn.type = 'button';
+    delBtn.className = 'report-del-btn';
+    delBtn.textContent = '🗑 حذف البلاغ';
+    delBtn.addEventListener('click', () => {
+      showConfirm({
+        title: 'حذف البلاغ',
+        body:  'هل تريد حذف البلاغ ؟',
+        okText: 'نعم',
+        danger: true, solid: true, solidCancel: true,
+        onOk: async () => {
+          try {
+            await fetch(`${DB_BASE}/reports/${uid}/${it.rep}.json`, { method: 'DELETE' });
+            block.remove();
+            showToast('تم حذف البلاغ 🗑');
+            renderReportsList();
+            // آخر بلاغ انحذف؟ أغلق النافذة
+            if (!body.querySelector('.report-block')) {
+              closeOverlaySheet(document.getElementById('reportInfoOverlay'));
+            }
+          } catch (_) { showToast('تعذر الحذف — تحقق من الشبكة'); }
+        }
+      });
+    });
+    block.appendChild(delBtn);
+
+    body.appendChild(block);
+  }
+  if (!items.length) body.innerHTML = '<div class="mod-empty">لا توجد تفاصيل</div>';
 }
 
 async function renderLiveList() {
@@ -3378,6 +3524,7 @@ async function doSignup() {
     const d = await authRequest('signUp', { email, password: pass, returnSecureToken: true });
     await migrateDeviceProfileTo(d.localId);
     await writeEmailHash(email, d.localId);   // لربط "عضو خاص" بالإيميل
+    await writeContactEmail(email, d.localId);
     finishAuth(email, d.localId, 'تم إنشاء الحساب ✓');
   } catch (e) { accShowError(authErrorAr(String(e.message))); }
 }
@@ -3391,6 +3538,7 @@ async function doLogin() {
     const d = await authRequest('signInWithPassword', { email, password: pass, returnSecureToken: true });
     await migrateDeviceProfileTo(d.localId);   // لو حسابه بلا ملف وعنده ملف جهاز — ننقله (فحص داخلي)
     await writeEmailHash(email, d.localId);    // لربط "عضو خاص" بالإيميل
+    await writeContactEmail(email, d.localId);
     finishAuth(email, d.localId, 'تم تسجيل الدخول ✓');
   } catch (e) { accShowError(authErrorAr(String(e.message))); }
 }
@@ -3529,10 +3677,71 @@ function bindProfileEvents() {
   // البلاغ + أدوات المالك (نافذة إجراءات منزلقة) + لوحة المالك
   document.getElementById('reportBtn').addEventListener('click', doReportUser);
   const adminOverlay = document.getElementById('adminOverlay');
-  document.getElementById('adminMenuBtn').addEventListener('click', () => openOverlaySheet(adminOverlay));
+
+  // داخل نافذة الإجراءات عرضان: الإجراءات ←→ مراسلة العضو على الإيميل
+  function showAdminActionsView() {
+    document.getElementById('adminActionsView').classList.remove('hidden');
+    document.getElementById('adminMsgView').classList.add('hidden');
+  }
+  let adminMsgEmail = null;
+  async function openAdminMsgView() {
+    document.getElementById('adminActionsView').classList.add('hidden');
+    document.getElementById('adminMsgView').classList.remove('hidden');
+    const p = profilesCache[profileViewUid] || {};
+    document.getElementById('msgName').textContent = p.name || 'مستخدم';
+    document.getElementById('msgUser').textContent = p.username ? '@' + p.username : 'لايوجد يوزر';
+    const av = document.getElementById('msgAvatar');
+    av.innerHTML = '<svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.6"/><path d="M5 20v-1a5.5 5.5 0 0 1 5.5-5.5h3A5.5 5.5 0 0 1 19 19v1"/></svg>';
+    if (p.avatar) {
+      av.innerHTML = '';
+      const img = document.createElement('img');
+      img.src = p.avatar; img.alt = '';
+      av.appendChild(img);
+    }
+    const emailEl = document.getElementById('msgEmail');
+    const sendBtn = document.getElementById('msgSendBtn');
+    emailEl.textContent = 'جارِ الجلب...';
+    sendBtn.disabled = true;
+    adminMsgEmail = await fetchContactEmail(profileViewUid);
+    emailEl.textContent = adminMsgEmail || 'لايوجد ( لم يسجّل دخوله بعد آخر تحديث )';
+    sendBtn.disabled = !adminMsgEmail;
+    const ta = document.getElementById('msgText');
+    ta.value = '';
+    document.getElementById('msgCount').textContent = '0/1000';
+  }
+  document.getElementById('adminMenuBtn').addEventListener('click', () => {
+    showAdminActionsView();
+    openOverlaySheet(adminOverlay);
+  });
   document.getElementById('adminCloseBtn').addEventListener('click', () => closeOverlaySheet(adminOverlay));
   adminOverlay.addEventListener('click', (e) => {
     if (e.target === adminOverlay) closeOverlaySheet(adminOverlay);
+  });
+  document.getElementById('adminEmailBtn').addEventListener('click', openAdminMsgView);
+  document.getElementById('msgBackBtn').addEventListener('click', showAdminActionsView);
+  document.getElementById('msgText').addEventListener('input', () => {
+    const ta = document.getElementById('msgText');
+    document.getElementById('msgCount').textContent = ta.value.length + '/1000';
+  });
+  // الإرسال: يفتح بريد المالك برسالة جاهزة من إيميله إلى إيميل العضو
+  document.getElementById('msgSendBtn').addEventListener('click', () => {
+    if (!adminMsgEmail) return;
+    const txt = (document.getElementById('msgText').value || '').trim().slice(0, 1000);
+    if (!txt) { showToast('اكتب الرسالة أولاً'); return; }
+    location.href = 'mailto:' + adminMsgEmail +
+      '?subject=' + encodeURIComponent('رسالة من إدارة المداقش 👑') +
+      '&body=' + encodeURIComponent(txt);
+  });
+
+  // نافذة معلومات البلاغ (من قائمة البلاغات في لوحة المالك)
+  const repOverlay = document.getElementById('reportInfoOverlay');
+  document.getElementById('reportInfoCloseBtn').addEventListener('click', () => closeOverlaySheet(repOverlay));
+  repOverlay.addEventListener('click', (e) => {
+    if (e.target === repOverlay) closeOverlaySheet(repOverlay);
+  });
+  document.getElementById('reportInfoProfileBtn').addEventListener('click', () => {
+    closeOverlaySheet(repOverlay);
+    if (reportInfoUid) openProfileScreen(reportInfoUid);
   });
   document.getElementById('adminSuspendBtn').addEventListener('click', () => { closeOverlaySheet(adminOverlay); adminToggleSuspend(); });
   document.getElementById('adminClearRepBtn').addEventListener('click', () => { closeOverlaySheet(adminOverlay); adminClearReports(); });
