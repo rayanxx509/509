@@ -2039,16 +2039,12 @@ body.viewer-mode .winner-amount-input {
   gap: 12px;
   text-align: center;
 }
-.home-suits {
-  display: flex;
-  gap: 10px;
-  margin-bottom: 2px;
-}
-.home-suits svg { display: block; }
-.home-title {
-  font-size: 26px;
-  font-weight: 900;
-  margin: 0;
+/* الشعار الرسمي (PNG شفاف بظل مدمج من تصميم المستخدم) */
+.home-logo {
+  display: block;
+  width: min(80%, 290px);
+  height: auto;
+  margin: -6px auto 0;
 }
 .home-sub {
   font-size: 13px;
