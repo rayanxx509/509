@@ -11,7 +11,7 @@
    - شاشة فوز بنظام الإقرار + زر "الفائز" اليدوي
    ==================================================================== */
 
-const APP_VERSION    = 45;             // يجب أن يطابق version.json و ?v= في index.html
+const APP_VERSION    = 46;             // يجب أن يطابق version.json و ?v= في index.html
 const PLAYERS_COUNT  = 10;
 const STORAGE_KEY    = 'madagish.v1';
 const REFRESH_MS     = 3000;
@@ -33,6 +33,22 @@ const SHARE_PUSH_DEBOUNCE = 500;       // الحكم يدفع الحالة بع�
 const VIEW_PARAMS  = new URLSearchParams(location.search);
 const VIEWER_MODE  = VIEW_PARAMS.has('view');
 const VIEW_SHARE_ID = VIEWER_MODE ? String(VIEW_PARAMS.get('view')).replace(/[^A-Za-z0-9_-]/g, '') : null;
+
+/* الحكم فتح رابط بثّه بنفسه على جهازه؟ هذا ليس مشاهداً — يعود لصفحته كحكم فوراً */
+const VIEWER_IS_SELF = VIEWER_MODE && (() => {
+  try {
+    const d = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
+    return !!(d && d.shareId === VIEW_SHARE_ID);
+  } catch (_) { return false; }
+})();
+if (VIEWER_IS_SELF) {
+  location.replace(location.origin + location.pathname);
+} else if (VIEWER_MODE) {
+  // آخر نشرة صاحب دخلتها — يغذي زر "الرجوع إلى نشرة صاحبك" في الواجهة الرئيسية
+  try {
+    localStorage.setItem('madagish.lastViewLink', location.origin + location.pathname + '?view=' + VIEW_SHARE_ID);
+  } catch (_) {}
+}
 
 const COLOR_THRESHOLDS = [
   { min: 70, color: 'green'  },
@@ -943,6 +959,8 @@ function closeSubScreens() {
   if (ps) ps.classList.add('hidden');
   const os = document.getElementById('ownerScreen');
   if (os) os.classList.add('hidden');
+  const hs = document.getElementById('homeScreen');
+  if (hs) { hs.classList.add('hidden'); hs.setAttribute('aria-hidden', 'true'); }
   closeSettingsDrawer(true);   // مغادرة الملف = الدرج لا يبقى معلقاً
 }
 
@@ -975,13 +993,74 @@ function backToList() {
   updateBarActive();
 }
 
+/* ============ الواجهة الرئيسية (ابدأ / نشرتك المخزنة / نشرة صاحبك) ============ */
+function boardHasData() {
+  if (state.winnerAmount !== null) return true;
+  if (state.capitalSet) return true;
+  if (state.roundsLog.length > 0) return true;
+  return state.players.some(p => p.name !== null || p.balance !== null);
+}
+
+function openHomeScreen() {
+  if (state.winnerShown) return;
+  closeSubScreens();
+  el.listScreen.classList.add('hidden');
+  const hs = document.getElementById('homeScreen');
+  hs.classList.remove('hidden');
+  hs.setAttribute('aria-hidden', 'false');
+  // زر "نشرة صاحبك" يظهر فقط إن سبق ودخل رابط نشرة من قبل
+  let last = null;
+  try { last = localStorage.getItem('madagish.lastViewLink'); } catch (_) {}
+  document.getElementById('homeFriendBtn').classList.toggle('hidden', !last);
+  updateBarActive();
+}
+
+function bindHomeScreen() {
+  document.getElementById('mainHomeBtn').addEventListener('click', openHomeScreen);
+
+  // نشرة جديدة = نفس فعل "مسح القائمة" تماماً (بتأكيد واحد إن كانت المخزنة فيها بيانات)
+  document.getElementById('homeNewBtn').addEventListener('click', () => {
+    if (VIEWER_MODE) {
+      // من داخل رابط مشاهدة: نعلّم الإقلاع القادم بالمسح ثم نذهب لصفحتنا النظيفة
+      try { localStorage.setItem('madagish.startFresh', '1'); } catch (_) {}
+      location.href = location.origin + location.pathname;
+      return;
+    }
+    if (!boardHasData()) { resetAll(); showToast('بدأت نشرة جديدة ✓'); return; }
+    showConfirm({
+      title: 'نشرة جديدة',
+      body:  'ستبدأ نشرة مداقش جديدة وتُمسح نشرتك المُخزنة نهائياً. متأكد؟',
+      okText: 'نعم، ابدأ جديدة',
+      danger: true,
+      onOk: () => { resetAll(); showToast('بدأت نشرة جديدة ✓'); }
+    });
+  });
+
+  // الدخول للتخزينة كما هي مهما كانت حالتها — بلا أي لمس لها
+  document.getElementById('homeContinueBtn').addEventListener('click', () => {
+    if (VIEWER_MODE) { location.href = location.origin + location.pathname; return; }
+    backToList();
+  });
+
+  // آخر رابط نشرة دخلته: حيّة = تشاهدها، منتهية = إشعار الانتهاء
+  document.getElementById('homeFriendBtn').addEventListener('click', () => {
+    let last = null;
+    try { last = localStorage.getItem('madagish.lastViewLink'); } catch (_) {}
+    if (!last) return;
+    if (VIEWER_MODE && VIEW_SHARE_ID && last.indexOf('view=' + VIEW_SHARE_ID) !== -1) { backToList(); return; }
+    location.href = last;
+  });
+}
+
 /* المؤشر المنزلق: ينساب خلف زر القائمة النشطة بحركة 0.35 ثانية */
 function updateBarActive() {
   const indicator = document.getElementById('barIndicator');
   if (!indicator) return;
   const ps = document.getElementById('profileScreen');
   const os = document.getElementById('ownerScreen');
+  const hs = document.getElementById('homeScreen');
   const states = [
+    ['mainHomeBtn', hs ? !hs.classList.contains('hidden') : false],
     ['homeBtn',    !el.listScreen.classList.contains('hidden')],
     ['devInfoBtn', !el.devScreen.classList.contains('hidden')],
     ['roundsBtn',  !el.roundsScreen.classList.contains('hidden')],
@@ -1281,6 +1360,7 @@ function bindEvents() {
   el.backBtn.addEventListener('click', hideWinner);
 
   // الشريط السفلي والصفحات الفرعية
+  bindHomeScreen();
   document.getElementById('homeBtn').addEventListener('click', backToList);
   el.devInfoBtn.addEventListener('click', openDevScreen);
   el.roundsBtn.addEventListener('click', openRoundsScreen);
@@ -1541,14 +1621,38 @@ async function pushBoard() {
   } catch (_) { /* أوفلاين — سيُدفع مع التعديل التالي */ }
 }
 
-function startSharing() {
-  state.shareId = makeShareId();
-  state.shareRev = 0;
-  saveState();               // يحفظ + يدفع أول نسخة
-  updateShareBtn();
-  startShareViewersLoop();
-  startChat(state.shareId, true);
-  openShareDialog(null, 'judge');   // نص الحكم الخاص
+/* بدء المشاركة بموافقة صريحة: النافذة تُعرض أولاً، والبث لا يبدأ فعلياً
+   إلا بزر الموافقة/النسخ — الإلغاء = لا يتغير أي شيء ولا يبدأ بث */
+function startSharingFlow() {
+  const id = makeShareId();   // الرابط جاهز للعرض لكنه غير مفعّل بعد
+  showPromptModal({
+    title: 'مشاركة النشرة',
+    body:
+      'بث الصفحه مباشرة لأصحابك وسيتم تفعيل الشات تلقائياً\n' +
+      'لاتخاف ( انت الحكم ولن يستطيع المُشاهد التحكم بالصفحه )\n' +
+      'وتستطيع الكتم للشخص المُزعج\n' +
+      'بالموافقة يبدأ البث ويُنسخ الرابط — أرسله لمن تريدهم ان يشاهدوا نشرتكم وهي حيَّه.',
+    okText: 'موافق — ابدأ وانسخ الرابط',
+    inputType: 'text',
+    initial: shareLink(id),
+    readonly: true,
+    onOk: async () => {
+      // الآن فقط يبدأ البث فعلياً
+      state.shareId = id;
+      state.shareRev = 0;
+      saveState();               // يحفظ + يدفع أول نسخة
+      updateShareBtn();
+      startShareViewersLoop();
+      startChat(id, true);
+      const jn = getNick();
+      const payload = (jn
+        ? `شاهد الآن بث مُباشر لنشرة المداقش مع الحكم "${jn}" 👇`
+        : 'شاهد الآن بث مُباشر لنشرة المداقش 👇') + '\n' + shareLink(id);
+      let ok = false;
+      try { await navigator.clipboard.writeText(payload); ok = true; } catch (_) {}
+      showToast(ok ? 'بدأ البث وتم نسخ الرابط مع رسالة جاهزة ✓' : 'بدأ البث ✓ ' + shareLink(id));
+    }
+  });
 }
 
 function stopSharing() {
@@ -1586,7 +1690,7 @@ function onShareBtnClick() {
       onOk: stopSharing
     });
   } else {
-    startSharing();
+    startSharingFlow();
   }
 }
 
@@ -1993,7 +2097,7 @@ function renderChatFeed(data) {
       // الأفتار أقصى اليمين (أسلوب تيك توك)
       const avEl = document.createElement('span');
       avEl.className = 'chat-av';
-      avEl.innerHTML = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.6"/><path d="M5 20v-1a5.5 5.5 0 0 1 5.5-5.5h3A5.5 5.5 0 0 1 19 19v1"/></svg>';
+      avEl.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.6"/><path d="M5 20v-1a5.5 5.5 0 0 1 5.5-5.5h3A5.5 5.5 0 0 1 19 19v1"/></svg>';
       if (uid) fillAvatar(avEl, uid);
       row.appendChild(avEl);
 
@@ -2533,9 +2637,9 @@ function renderProfileScreen(uid, p) {
   // زر الإبلاغ: يظهر لغير صاحب الملف (والمالك ما يحتاجه)
   document.getElementById('reportBtn').classList.toggle('hidden', profileIsMine || owner);
 
-  // أدوات المالك: تظهر للمالك على ملفات الآخرين فقط
-  const panel = document.getElementById('adminPanel');
-  panel.classList.toggle('hidden', !owner || profileIsMine);
+  // أدوات المالك: زر بجانب "مشاركة الصفحة" يفتح نافذة الإجراءات المنزلقة
+  const adminBtn = document.getElementById('adminMenuBtn');
+  if (adminBtn) adminBtn.classList.toggle('hidden', !owner || profileIsMine);
   if (owner && !profileIsMine) {
     document.getElementById('adminSuspendBtn').textContent = suspended ? '▶ فك الإيقاف' : '⏸ إيقاف مؤقت';
     refreshAdminReportsCount(uid);
@@ -2604,24 +2708,43 @@ function closeSettingsDrawer(instant) {
   setTimeout(() => { if (!d.classList.contains('open')) b.classList.add('hidden'); }, 320);
 }
 
-/* ============ رفع الأفتار (ضغط تلقائي عبر canvas) ============ */
+/* ============ رفع الأفتار — نسختان (ضغط تلقائي عبر canvas) ============
+   صغيرة 160 مربعة للشات والقوائم (سرعة)، وكاملة عالية الجودة (بلا قص،
+   أقصى ضلع 900) للعرض الكامل — تُخزن في فرع avatars المستقل حتى لا
+   تُثقل جلب الملفات الشخصية في الدردشة */
+function scaleImageToJpeg(imgObj, maxSide, quality) {
+  const scale = Math.min(1, maxSide / Math.max(imgObj.width, imgObj.height));
+  const cw = Math.max(1, Math.round(imgObj.width * scale));
+  const ch = Math.max(1, Math.round(imgObj.height * scale));
+  const canvas = document.createElement('canvas');
+  canvas.width = cw; canvas.height = ch;
+  canvas.getContext('2d').drawImage(imgObj, 0, 0, cw, ch);
+  return canvas.toDataURL('image/jpeg', quality);
+}
+
 function handleAvatarFile(file) {
   if (!file || !file.type || !file.type.startsWith('image/')) return;
   const reader = new FileReader();
   reader.onload = () => {
     const imgObj = new Image();
     imgObj.onload = async () => {
+      // 1) الأفتار الصغير: قصّ مربع من المنتصف ثم تصغير — مثل كل منصات التواصل
       const S = 160;
       const canvas = document.createElement('canvas');
       canvas.width = S; canvas.height = S;
       const ctx = canvas.getContext('2d');
-      // قصّ مربع من المنتصف ثم تصغير — مثل كل منصات التواصل
       const side = Math.min(imgObj.width, imgObj.height);
       const sx = (imgObj.width - side) / 2;
       const sy = (imgObj.height - side) / 2;
       ctx.drawImage(imgObj, sx, sy, side, side, 0, 0, S, S);
       const dataUrl = canvas.toDataURL('image/jpeg', 0.78);
+      // 2) نسخة العرض الكاملة: بلا قص، بجودة عالية تكفي شاشة الهاتف وتزيد
+      const fullUrl = scaleImageToJpeg(imgObj, 900, 0.85);
       const ok = await patchMyProfile({ avatar: dataUrl });
+      fetch(`${DB_BASE}/avatars/${chatUid()}.json`, {
+        method: 'PUT',
+        body: JSON.stringify(fullUrl)
+      }).catch(() => {});
       if (ok) {
         renderProfileScreen(chatUid(), myProfile);
         updateBarAvatar();
@@ -3317,24 +3440,47 @@ function bindProfileEvents() {
   const dv = document.getElementById('drawerVer');
   if (dv) dv.textContent = 'v' + APP_VERSION;
 
-  // الأفتار
+  // الأفتار: لمسه = عرض الصورة الكاملة (للجميع حتى صاحب الملف)
+  // التغيير حصرياً من أيقونة الكاميرا
   const fileInput = document.getElementById('avatarFile');
-  document.getElementById('profileAvatarBtn').addEventListener('click', () => {
-    if (!profileIsMine) {
-      // زائر يضغط أفتار صاحب الملف: عرض الصورة بحجم طبيعي
-      const p = profilesCache[profileViewUid];
-      if (p && p.avatar) {
-        document.getElementById('imgViewerImg').src = p.avatar;
-        document.getElementById('imgViewer').classList.remove('hidden');
-      }
+  document.getElementById('profileAvatarBtn').addEventListener('click', async () => {
+    const uid = profileViewUid;
+    const p = profilesCache[uid] || (profileIsMine ? myProfile : null);
+    if (!p || !p.avatar) {
+      if (profileIsMine) showToast('لا توجد صورة بعد — أضفها من أيقونة الكاميرا 📷');
       return;
     }
-    // رفع الصورة ميزة موثَّقين فقط
+    const viewer = document.getElementById('imgViewer');
+    const vimg = document.getElementById('imgViewerImg');
+    vimg.src = p.avatar;                 // فوري: النسخة الصغيرة ريثما تصل الكاملة
+    viewer.classList.remove('hidden');
+    // ترقية للجودة الكاملة فور وصولها من فرع avatars (إن وُجدت)
+    try {
+      const res = await fetch(`${DB_BASE}/avatars/${uid}.json?t=` + Date.now(), { cache: 'no-store' });
+      if (res.ok) {
+        const full = await res.json();
+        if (typeof full === 'string' && full.indexOf('data:image') === 0 &&
+            profileViewUid === uid && !viewer.classList.contains('hidden')) {
+          vimg.src = full;
+        }
+      }
+    } catch (_) { /* تبقى الصغيرة معروضة */ }
+  });
+  // أيقونة الكاميرا: نافذة خيارات منزلقة (تغيير الصورة)
+  document.getElementById('profileAvatarCam').addEventListener('click', (e) => {
+    e.stopPropagation();   // لا تفتح عارض الصورة
+    if (!profileIsMine) return;
     if (!isVerifiedMe()) {
       showToast('🔒 وثّق حسابك ( إيميل + كلمة مرور + يوزر ) لتفعيل الصورة والنبذة');
       return;
     }
-    fileInput.click();
+    showConfirm({
+      title: 'الصورة الشخصية 📷',
+      body:  'اختر الإجراء الذي تريده:',
+      okText: 'تغيير الصورة',
+      danger: false,
+      onOk: () => fileInput.click()
+    });
   });
   fileInput.addEventListener('change', () => {
     if (fileInput.files && fileInput.files[0]) handleAvatarFile(fileInput.files[0]);
@@ -3372,11 +3518,17 @@ function bindProfileEvents() {
     openShareDialog(profileLink(profileViewUid, p), 'profile');
   });
 
-  // البلاغ + أدوات المالك + لوحة المالك
+  // البلاغ + أدوات المالك (نافذة إجراءات منزلقة) + لوحة المالك
   document.getElementById('reportBtn').addEventListener('click', doReportUser);
-  document.getElementById('adminSuspendBtn').addEventListener('click', adminToggleSuspend);
-  document.getElementById('adminClearRepBtn').addEventListener('click', adminClearReports);
-  document.getElementById('adminDeleteBtn').addEventListener('click', adminDeleteProfile);
+  const adminOverlay = document.getElementById('adminOverlay');
+  document.getElementById('adminMenuBtn').addEventListener('click', () => openOverlaySheet(adminOverlay));
+  document.getElementById('adminCloseBtn').addEventListener('click', () => closeOverlaySheet(adminOverlay));
+  adminOverlay.addEventListener('click', (e) => {
+    if (e.target === adminOverlay) closeOverlaySheet(adminOverlay);
+  });
+  document.getElementById('adminSuspendBtn').addEventListener('click', () => { closeOverlaySheet(adminOverlay); adminToggleSuspend(); });
+  document.getElementById('adminClearRepBtn').addEventListener('click', () => { closeOverlaySheet(adminOverlay); adminClearReports(); });
+  document.getElementById('adminDeleteBtn').addEventListener('click', () => { closeOverlaySheet(adminOverlay); adminDeleteProfile(); });
   document.getElementById('ownerBtn').addEventListener('click', openOwnerScreen);
   document.getElementById('ownerBackBtn').addEventListener('click', backToList);
   document.getElementById('vipOkBtn').addEventListener('click', vipAssign);
@@ -3393,6 +3545,10 @@ function bindProfileEvents() {
   document.getElementById('sheetCloseBtn').addEventListener('click', () => closeUserSheet());
   document.getElementById('sheetBackdrop').addEventListener('click', () => closeUserSheet());
   document.getElementById('sheetName').addEventListener('click', () => {
+    if (sheetUid) openProfileScreen(sheetUid);
+  });
+  // لمس أفتار البطاقة = الانتقال لملف الشخص مباشرة (مثل الاسم)
+  document.getElementById('sheetAvatar').addEventListener('click', () => {
     if (sheetUid) openProfileScreen(sheetUid);
   });
   // الرد عليه: منشن جاهز في حقل الدردشة (بدون فتح الكيبورد — المستخدم يلمس الحقل بنفسه)
@@ -3418,9 +3574,9 @@ function bindProfileEvents() {
     document.getElementById('imgViewer').classList.add('hidden');
   });
 
-  // زر صفحة انتهاء المشاركة: الذهاب للقائمة الرئيسية (التطبيق الكامل بدون وضع المشاهدة)
+  // زر صفحة انتهاء المشاركة: الذهاب للواجهة الرئيسية (ابدأ / نشرتك / نشرة صاحبك)
   document.getElementById('endedHomeBtn').addEventListener('click', () => {
-    location.href = location.origin + location.pathname;
+    location.href = location.origin + location.pathname + '#home';
   });
 }
 
@@ -3578,6 +3734,14 @@ async function fetchYearlyUsers() {
 
 /* ============ الإقلاع ============ */
 function init() {
+  if (VIEWER_IS_SELF) return;   // جارٍ التحويل لصفحة الحكم — لا نقلع كمشاهد
+  // زر "ابدأ نشرة جديدة" ضُغط من داخل رابط مشاهدة: نفّذ المسح الآن ثم اقلع نظيفاً
+  try {
+    if (!VIEWER_MODE && localStorage.getItem('madagish.startFresh')) {
+      localStorage.removeItem('madagish.startFresh');
+      localStorage.removeItem(STORAGE_KEY);
+    }
+  } catch (_) {}
   loadState();
   bindEvents();
   if (!VIEWER_MODE) bindCrossTabSync();
@@ -3600,6 +3764,12 @@ function init() {
     schedulePushBoard();
     startShareViewersLoop();
     startChat(state.shareId, true);
+  }
+
+  // القادم من إشعار انتهاء المشاركة: افتح الواجهة الرئيسية مباشرة
+  if (!VIEWER_MODE && location.hash === '#home') {
+    try { history.replaceState(null, '', location.pathname + location.search); } catch (_) {}
+    openHomeScreen();
   }
 }
 
