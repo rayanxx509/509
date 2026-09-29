@@ -11,7 +11,7 @@
    - شاشة فوز بنظام الإقرار + زر "الفائز" اليدوي
    ==================================================================== */
 
-const APP_VERSION    = 46;             // يجب أن يطابق version.json و ?v= في index.html
+const APP_VERSION    = 47;             // يجب أن يطابق version.json و ?v= في index.html
 const PLAYERS_COUNT  = 10;
 const STORAGE_KEY    = 'madagish.v1';
 const REFRESH_MS     = 3000;
@@ -1577,8 +1577,15 @@ function makeShareId() {
   return s;
 }
 
+/* مجلد التطبيق (يتعامل مع /509/ و /509/index.html معاً) */
+function appDir() {
+  return location.origin + location.pathname.replace(/[^/]*$/, '');
+}
+
+/* روابط البث تمر عبر live.html — صفحة وصول بنص معاينة "بث مباشر" الخاص
+   (زاحف واتساب لا يشغّل JS، فلكل نوع مشاركة صفحته بنصها — ثم تحويل فوري للتطبيق) */
 function shareLink(id) {
-  return `${location.origin}${location.pathname}?view=${id}`;
+  return `${appDir()}live.html?view=${id}`;
 }
 
 function buildSnapshot() {
@@ -3031,9 +3038,10 @@ function bindSheetDrag() {
   window.addEventListener('mouseup', onEnd);
 }
 
-/* ============ مشاركة صفحة الملف ============ */
+/* ============ مشاركة صفحة الملف ============
+   تمر عبر profile.html — صفحة وصول بنص معاينة "ملف شخصي" الخاص */
 function profileLink(uid, p) {
-  const base = `${location.origin}${location.pathname}`;
+  const base = `${appDir()}profile.html`;
   if (p && p.username) return `${base}?profile=${p.username}`;
   return `${base}?profile=u:${uid}`;
 }
