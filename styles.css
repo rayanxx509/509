@@ -38,7 +38,9 @@ html, body {
   font-size: 16px;
   line-height: 1.4;
   -webkit-font-smoothing: antialiased;
-  overscroll-behavior: none;
+  /* contain (لا none): يبقي ارتداد نهاية الصفحة الطبيعي كالتطبيقات الأصلية،
+     ويمنع فقط "السحب للتحديث" والتنقل بالسحب — none كان يلغي الارتداد أيضاً */
+  overscroll-behavior: contain;
 }
 
 body {
@@ -2417,6 +2419,20 @@ body.viewer-mode .winner-amount-input {
   padding: 14px 16px;
 }
 .msg-back:active { background: #E5E7EB; }
+
+/* ======= التمرير بقصور ذاتي ======= */
+/* القوائم الداخلية: عزم طبيعي حتى على iOS القديم + لا تسرّب للتمرير إلى الصفحة خلفها */
+.chat-feed, .mod-list, .confirm-box, .settings-drawer, #reportInfoBody {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+/* أثناء سحب الماوس: مؤشر قبضة وبلا تحديد نص */
+body.kinetic-drag {
+  cursor: grabbing;
+  user-select: none;
+  -webkit-user-select: none;
+}
+body.kinetic-drag * { cursor: grabbing !important; }
 
 /* ======= ملاءمة للشاشات الأصغر ======= */
 @media (max-width: 380px) {

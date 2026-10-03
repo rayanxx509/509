@@ -11,7 +11,7 @@
    - شاشة فوز بنظام الإقرار + زر "الفائز" اليدوي
    ==================================================================== */
 
-const APP_VERSION    = 51;             // يجب أن يطابق version.json و ?v= في index.html
+const APP_VERSION    = 52;             // يجب أن يطابق version.json و ?v= في index.html
 const PLAYERS_COUNT  = 10;
 const STORAGE_KEY    = 'madagish.v1';
 const REFRESH_MS     = 3000;
@@ -4487,6 +4487,128 @@ function init() {
     openHomeScreen();
   }
 }
+
+/* ====================================================================
+   تمرير بقصور ذاتي للماوس والقلم (الكمبيوتر) — اسحب الصفحة أو أي قائمة
+   واتركها فتكمل الانزلاق وتتباطأ حتى تتوقف وحدها (كالتطبيقات الأصلية).
+   الهواتف تملك هذا السلوك أصلاً من نظامها (لمس) — لا نتدخل فيها إطلاقاً.
+   ==================================================================== */
+(function kineticScroll() {
+  const DECAY_PER_MS   = 0.998;   // معدل التباطؤ — مطابق لتمرير iOS الأصلي
+  const MIN_VELOCITY   = 0.02;    // بكسل/ملّي ثانية — دونها يتوقف
+  const DRAG_THRESHOLD = 6;       // بكسل — دونها تُعد نقرة عادية
+  // لا يبدأ السحب من: حقول الكتابة، مقبض البطاقة السفلية، النصوص القابلة للتحديد، الفيديو
+  const NO_DRAG = 'input, textarea, select, [contenteditable], .sheet-handle, .warn-text, .msg-email, .page-email, video';
+
+  let active = null;            // جلسة السحب الحالية
+  let rafId = 0;
+  let suppressClickUntil = 0;
+
+  /* أقرب حاوية تستطيع التمرير على هذا المحور — وإلا الصفحة نفسها.
+     الطبقات الثابتة (شريط، لوحة، نافذة) غير القابلة للتمرير توقف البحث:
+     السحب فوقها لا يحرّك الصفحة خلفها */
+  function scrollableFor(el, axis) {
+    let n = el;
+    while (n && n !== document.body && n !== document.documentElement) {
+      if (n instanceof Element) {
+        const cs = getComputedStyle(n);
+        const ov = axis === 'y' ? cs.overflowY : cs.overflowX;
+        const can = ov === 'auto' || ov === 'scroll';
+        const room = axis === 'y' ? (n.scrollHeight - n.clientHeight) : (n.scrollWidth - n.clientWidth);
+        if (can && room > 1) return n;
+        if (cs.position === 'fixed') return null;
+      }
+      n = n.parentNode;
+    }
+    const root = document.scrollingElement || document.documentElement;
+    const room = axis === 'y' ? (root.scrollHeight - root.clientHeight) : (root.scrollWidth - root.clientWidth);
+    return room > 1 ? root : null;
+  }
+
+  function scrollBy(target, axis, delta) {
+    if (!target || !delta) return false;
+    const before = axis === 'y' ? target.scrollTop : target.scrollLeft;
+    if (axis === 'y') target.scrollTop = before + delta; else target.scrollLeft = before + delta;
+    const after = axis === 'y' ? target.scrollTop : target.scrollLeft;
+    return Math.abs(after - before) > 0.5;   // false = بلغنا الحد
+  }
+
+  function stopInertia() {
+    if (rafId) { cancelAnimationFrame(rafId); rafId = 0; }
+  }
+
+  function runInertia(s) {
+    let vx = s.vx, vy = s.vy;
+    let last = performance.now();
+    function step(now) {
+      const dt = Math.min(50, now - last);   // سقف زمني — تبويب خلفي لا يقفز
+      last = now;
+      const k = Math.pow(DECAY_PER_MS, dt);
+      vx *= k; vy *= k;
+      let movedY = false, movedX = false;
+      if (Math.abs(vy) >= MIN_VELOCITY) movedY = scrollBy(s.ty, 'y', -vy * dt);
+      if (Math.abs(vx) >= MIN_VELOCITY) movedX = scrollBy(s.tx, 'x', -vx * dt);
+      if (!movedY) vy = 0;
+      if (!movedX) vx = 0;
+      rafId = (Math.abs(vx) >= MIN_VELOCITY || Math.abs(vy) >= MIN_VELOCITY) ? requestAnimationFrame(step) : 0;
+    }
+    rafId = requestAnimationFrame(step);
+  }
+
+  document.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'touch') return;   // اللمس: عزم النظام الأصلي كما هو
+    if (e.button !== 0) return;
+    stopInertia();                            // أي ضغطة توقف انزلاقاً جارياً
+    const t = e.target;
+    if (!(t instanceof Element) || t.closest(NO_DRAG)) return;
+    const ty = scrollableFor(t, 'y');
+    const tx = scrollableFor(t, 'x');
+    if (!ty && !tx) return;
+    active = { ty, tx, x: e.clientX, y: e.clientY, lx: e.clientX, ly: e.clientY,
+               lt: performance.now(), vx: 0, vy: 0, dragging: false };
+  }, true);
+
+  document.addEventListener('pointermove', (e) => {
+    if (!active || e.pointerType === 'touch') return;
+    if (e.buttons === 0) { active = null; return; }   // الزر انفلت خارج النافذة
+    const dx = e.clientX - active.x, dy = e.clientY - active.y;
+    if (!active.dragging) {
+      if (Math.abs(dx) < DRAG_THRESHOLD && Math.abs(dy) < DRAG_THRESHOLD) return;
+      active.dragging = true;
+      document.body.classList.add('kinetic-drag');
+    }
+    e.preventDefault();                               // لا تحديد نص أثناء السحب
+    const now = performance.now();
+    const dt = Math.max(1, now - active.lt);
+    const mx = e.clientX - active.lx, my = e.clientY - active.ly;
+    scrollBy(active.ty, 'y', -my);
+    scrollBy(active.tx, 'x', -mx);
+    active.vx = 0.7 * (mx / dt) + 0.3 * active.vx;   // سرعة ممهّدة (بكسل/ملّي ثانية)
+    active.vy = 0.7 * (my / dt) + 0.3 * active.vy;
+    active.lx = e.clientX; active.ly = e.clientY; active.lt = now;
+  }, { passive: false, capture: true });
+
+  function endDrag() {
+    if (!active) return;
+    const s = active;
+    active = null;
+    document.body.classList.remove('kinetic-drag');
+    if (!s.dragging) return;
+    suppressClickUntil = Date.now() + 200;             // السحب ليس نقرة
+    if (performance.now() - s.lt > 80) return;         // توقّف قبل الإفلات = لا قصور (كالأصلي)
+    runInertia(s);
+  }
+  document.addEventListener('pointerup', endDrag, true);
+  document.addEventListener('pointercancel', endDrag, true);
+  document.addEventListener('wheel', stopInertia, { passive: true });
+  document.addEventListener('selectstart', (e) => { if (active && active.dragging) e.preventDefault(); });
+  document.addEventListener('dragstart',   (e) => { if (active) e.preventDefault(); }, true);
+
+  // النقرة التي تلي سحباً تُلغى — حتى لا يُفتح عنصر صدفة بعد الإفلات
+  document.addEventListener('click', (e) => {
+    if (Date.now() < suppressClickUntil) { e.stopPropagation(); e.preventDefault(); }
+  }, true);
+})();
 
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', init);
